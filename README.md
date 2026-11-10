@@ -1,36 +1,35 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Contas do Casal
 
-## Getting Started
+Controle de compras, parcelamentos e acertos mensais de um casal: quem pagou, de quem é a compra e quanto cada um precisa enviar para o outro no fim do mês.
 
-First, run the development server:
+**Stack:** Next.js 15 (App Router, Server Actions) · Prisma · Postgres (Neon) · Tailwind · Vercel
+
+## Como funciona
+
+- Cada pessoa cria sua conta (e-mail e senha). Uma cria o **casal** e passa o **código de convite** para a outra.
+- Cada **compra** registra:
+  - **Quem pagou**: o dono do cartão ou da conta usada.
+  - **De quem é**: dividida 50/50, só de quem pagou, só do outro ou um percentual personalizado.
+  - **Parcelas** e o **mês da 1ª parcela** (o mês da fatura).
+- Exemplo: a esposa compra um tênis de R$ 600 em 3x no cartão do marido. Você marca "Pago por: marido" e "Só da esposa". Em cada um dos 3 meses, ela deve R$ 200 a ele.
+- O **Resumo** de cada mês compensa o que um deve ao outro e mostra quem envia quanto para quem. Depois do Pix, registre a **transferência** e o mês fica zerado. Se ficou algo pendente de meses anteriores, o resumo avisa.
+
+## Rodando localmente
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
+pnpm install
+cp .env.example .env        # preencha AUTH_SECRET
+docker compose up -d db     # Postgres local na porta 5434
+pnpm db:migrate
 pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`pnpm test` roda os testes da lógica de cálculo ([src/lib/ledger.ts](src/lib/ledger.ts)).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deploy na Vercel
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Suba o repositório no GitHub e importe o projeto na Vercel.
+2. Em **Storage → Neon (Marketplace)**, crie um banco e conecte ao projeto. Isso cria `DATABASE_URL` e `DATABASE_URL_UNPOOLED`.
+3. Em **Settings → Environment Variables**, adicione `AUTH_SECRET` (32 caracteres ou mais):
+   `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`
+4. Faça o deploy. O build roda `prisma migrate deploy` antes do `next build`, então as tabelas são criadas automaticamente.
