@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   addMonths,
+  invoiceMonthFor,
   parseBRL,
   splitInstallments,
   summarizeMonth,
+  type BillLike,
   type PurchaseLike,
   type SettlementLike,
 } from "./ledger";
@@ -87,5 +89,51 @@ describe("summarizeMonth", () => {
 
     const semAcerto = summarizeMonth(compras, [], "2026-12", members);
     expect(semAcerto.cumulative.amountCents).toBe(20000);
+  });
+});
+
+describe("contas fixas e renda", () => {
+  const bill = (over: Partial<BillLike>): BillLike => ({
+    id: "b", name: "Aluguel", amountCents: 100000, dueDay: 5, paidById: MARIDO,
+    payerSharePct: null, startMonth: "2026-01", endMonth: null, ...over,
+  });
+  const incomes = [
+    { userId: MARIDO, amountCents: 600000, startMonth: "2026-01", endMonth: null },
+    { userId: ESPOSA, amountCents: 400000, startMonth: "2026-01", endMonth: null },
+  ];
+
+  it("divide proporcional à renda: esposa ganha 40%, deve 40% do aluguel", () => {
+    const s = summarizeMonth([], [], "2026-11", members, { bills: [bill({})], incomes });
+    expect(s.monthDebt).toEqual({ debtorId: ESPOSA, creditorId: MARIDO, amountCents: 40000 });
+    expect(s.consumptionBy[MARIDO]).toBe(60000);
+  });
+
+  it("sem renda cadastrada, proporcional vira 50/50", () => {
+    const s = summarizeMonth([], [], "2026-11", members, { bills: [bill({})], incomes: [] });
+    expect(s.monthDebt.amountCents).toBe(50000);
+  });
+
+  it("conta pessoal (100% de quem paga) não gera dívida; respeita vigência", () => {
+    const f = { bills: [bill({ payerSharePct: 100 }), bill({ id: "c", payerSharePct: 50, endMonth: "2026-10" })], incomes };
+    const s = summarizeMonth([], [], "2026-11", members, f);
+    expect(s.monthDebt.amountCents).toBe(0);
+    expect(s.lines).toHaveLength(1);
+    expect(summarizeMonth([], [], "2026-10", members, f).monthDebt.amountCents).toBe(50000);
+  });
+
+  it("acumulado conta meses anteriores das contas fixas", () => {
+    const s = summarizeMonth([], [], "2026-03", members, { bills: [bill({ payerSharePct: 50 })], incomes });
+    expect(s.cumulative.amountCents).toBe(150000);
+  });
+});
+
+describe("invoiceMonthFor", () => {
+  it("antes do fechamento cai na fatura do mês; depois, na seguinte", () => {
+    expect(invoiceMonthFor("2026-11-03", 10, 17)).toBe("2026-11");
+    expect(invoiceMonthFor("2026-11-10", 10, 17)).toBe("2026-12");
+  });
+  it("vencimento antes do fechamento joga para o mês seguinte", () => {
+    expect(invoiceMonthFor("2026-11-03", 28, 5)).toBe("2026-12");
+    expect(invoiceMonthFor("2026-12-29", 28, 5)).toBe("2027-02");
   });
 });

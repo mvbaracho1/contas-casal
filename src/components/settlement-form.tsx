@@ -40,7 +40,7 @@ export function SettlementForm({
         </div>
       </div>
       <Message state={state} />
-      <Submit>Registrar transferência</Submit>
+      <Submit className="btn w-full sm:w-auto">Registrar transferência</Submit>
     </form>
   );
 }

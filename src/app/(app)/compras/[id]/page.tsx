@@ -1,26 +1,35 @@
 import { notFound } from "next/navigation";
 import { deletePurchase } from "@/app/actions";
+import { IconTrash } from "@/components/icons";
+import { PageHeader } from "@/components/page-header";
 import { PurchaseForm } from "@/components/purchase-form";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { cardOptions } from "@/lib/finance-data";
 
 export default async function EditarCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { couple } = await requireCouple();
   const p = await prisma.purchase.findFirst({ where: { id, coupleId: couple.id } });
   if (!p) notFound();
+  const cards = await cardOptions(couple.id);
 
   return (
-    <>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">Editar compra</h1>
-        <form action={deletePurchase}>
-          <input type="hidden" name="id" value={p.id} />
-          <button className="btn-danger">Excluir</button>
-        </form>
-      </div>
+    <div className="mx-auto max-w-3xl space-y-4">
+      <PageHeader
+        title="Editar compra"
+        subtitle={p.description}
+        addButton={false}
+        actions={
+          <form action={deletePurchase}>
+            <input type="hidden" name="id" value={p.id} />
+            <button className="btn-danger"><IconTrash /> <span className="hidden sm:inline">Excluir</span></button>
+          </form>
+        }
+      />
       <PurchaseForm
         members={couple.members}
+        cards={cards}
         defaults={{
           id: p.id,
           description: p.description,
@@ -31,8 +40,9 @@ export default async function EditarCompraPage({ params }: { params: Promise<{ i
           purchaseDate: p.purchaseDate.toISOString().slice(0, 10),
           paidById: p.paidById,
           payerSharePct: p.payerSharePct,
+          cardId: p.cardId,
         }}
       />
-    </>
+    </div>
   );
 }

@@ -16,6 +16,10 @@ model Couple {
   members     User[]
   purchases   Purchase[]
   settlements Settlement[]
+  incomes     Income[]
+  cards       Card[]
+  bills       Bill[]
+  paidMarks   PaidMark[]
 }
 
 model User {
@@ -30,6 +34,9 @@ model User {
   paidPurchases    Purchase[]   @relation("PaidBy")
   settlementsSent  Settlement[] @relation("SettlementFrom")
   settlementsRecvd Settlement[] @relation("SettlementTo")
+  incomes          Income[]
+  cards            Card[]
+  bills            Bill[]
 }
 
 /// Uma compra (à vista ou parcelada).
@@ -52,6 +59,8 @@ model Purchase {
   paidById      String
   paidBy        User     @relation("PaidBy", fields: [paidById], references: [id])
   payerSharePct Int      @default(50)
+  cardId        String?
+  card          Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
 
   @@index([coupleId, firstMonth])
@@ -71,5 +80,78 @@ model Settlement {
   note        String?
   createdAt   DateTime @default(now())
 
+  @@index([coupleId, month])
+}
+
+/// Renda mensal de uma pessoa (salário, freela...). Vale de startMonth até endMonth (inclusive).
+model Income {
+  id          String   @id @default(cuid())
+  coupleId    String
+  couple      Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  description String
+  amountCents Int
+  startMonth  String
+  endMonth    String?
+  createdAt   DateTime @default(now())
+
+  @@index([coupleId])
+}
+
+/// Cartão de crédito. A fatura de um mês é a soma das parcelas das compras feitas nele.
+model Card {
+  id         String     @id @default(cuid())
+  coupleId   String
+  couple     Couple     @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  ownerId    String
+  owner      User       @relation(fields: [ownerId], references: [id])
+  name       String
+  color      String     @default("black")
+  closingDay Int
+  dueDay     Int
+  limitCents Int?
+  createdAt  DateTime   @default(now())
+  purchases  Purchase[]
+  paidMarks  PaidMark[]
+
+  @@index([coupleId])
+}
+
+/// Conta fixa mensal (aluguel, condomínio, luz...).
+/// `payerSharePct` = parte (%) de quem paga; null = proporcional à renda do casal.
+model Bill {
+  id            String     @id @default(cuid())
+  coupleId      String
+  couple        Couple     @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  name          String
+  category      String     @default("Outros")
+  amountCents   Int
+  dueDay        Int
+  paidById      String
+  paidBy        User       @relation(fields: [paidById], references: [id])
+  payerSharePct Int?
+  startMonth    String
+  endMonth      String?
+  createdAt     DateTime   @default(now())
+  paidMarks     PaidMark[]
+
+  @@index([coupleId])
+}
+
+/// Marca uma conta fixa ou fatura de cartão como paga em um mês.
+model PaidMark {
+  id        String   @id @default(cuid())
+  coupleId  String
+  couple    Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  month     String
+  billId    String?
+  bill      Bill?    @relation(fields: [billId], references: [id], onDelete: Cascade)
+  cardId    String?
+  card      Card?    @relation(fields: [cardId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([billId, month])
+  @@unique([cardId, month])
   @@index([coupleId, month])
 }

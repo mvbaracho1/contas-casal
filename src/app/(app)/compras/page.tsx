@@ -1,13 +1,15 @@
 import Link from "next/link";
+import { PageHeader } from "@/components/page-header";
+import { Avatar, pct } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { addMonths, currentYm, formatBRL, formatYm, ymToIndex } from "@/lib/ledger";
 
-function shareLabel(pct: number, payer: string, other: string) {
-  if (pct === 50) return "Dividida 50/50";
-  if (pct === 100) return `Só de ${payer}`;
-  if (pct === 0) return `Só de ${other}`;
-  return `${payer} ${pct}% · ${other} ${100 - pct}%`;
+function shareLabel(p: number, payer: string, other: string) {
+  if (p === 50) return "Dividida 50/50";
+  if (p === 100) return `Só de ${payer}`;
+  if (p === 0) return `Só de ${other}`;
+  return `${payer} ${p}% · ${other} ${100 - p}%`;
 }
 
 export default async function ComprasPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
@@ -19,57 +21,81 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
     orderBy: [{ purchaseDate: "desc" }, { createdAt: "desc" }],
   });
   const now = ymToIndex(currentYm());
-  const visible = purchases.filter((p) => {
-    const lastIdx = ymToIndex(p.firstMonth) + p.installments - 1;
-    return filtro === "todas" || lastIdx >= now;
-  });
+  const active = purchases.filter((p) => ymToIndex(p.firstMonth) + p.installments - 1 >= now);
+  const visible = filtro === "todas" ? purchases : active;
+
+  const seg = (on: boolean) =>
+    `rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+      on ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"
+    }`;
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">Compras</h1>
-        <Link href="/compras/nova" className="btn">+ Nova compra</Link>
-      </div>
-      <div className="flex gap-2 text-sm">
-        <Link href="/compras" className={filtro !== "todas" ? "btn-ghost bg-zinc-200 dark:bg-zinc-800" : "btn-ghost"}>Em aberto</Link>
-        <Link href="/compras?filtro=todas" className={filtro === "todas" ? "btn-ghost bg-zinc-200 dark:bg-zinc-800" : "btn-ghost"}>Todas</Link>
-      </div>
+      <PageHeader title="Compras" subtitle={`${active.length} em aberto · ${purchases.length} no total`} />
 
-      {visible.length === 0 ? (
-        <div className="card text-center text-zinc-500">Nenhuma compra por aqui ainda.</div>
-      ) : (
-        <ul className="space-y-2">
-          {visible.map((p) => {
-            const other = memberIds.find((m) => m !== p.paidById)!;
-            const lastMonth = addMonths(p.firstMonth, p.installments - 1);
-            const paidSoFar = Math.max(0, Math.min(p.installments, now - ymToIndex(p.firstMonth) + 1));
-            return (
-              <li key={p.id}>
-                <Link href={`/compras/${p.id}`} className="card flex flex-wrap items-center justify-between gap-2 hover:border-emerald-400">
-                  <div className="min-w-0">
-                    <p className="font-medium">
-                      {p.description}
-                      {p.category && <span className="ml-2 rounded bg-zinc-100 px-1.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{p.category}</span>}
-                    </p>
-                    <p className="text-sm text-zinc-500">
-                      Pago por {names[p.paidById]} · {shareLabel(p.payerSharePct, names[p.paidById], names[other])}
-                    </p>
-                    <p className="text-xs text-zinc-400">
-                      {p.installments > 1
-                        ? `${p.installments}x · ${formatYm(p.firstMonth)} → ${formatYm(lastMonth)} · ${paidSoFar}/${p.installments} faturas`
-                        : `À vista · ${formatYm(p.firstMonth)}`}
-                    </p>
-                  </div>
-                  <div className="text-right">
-                    <p className="font-semibold">{formatBRL(p.totalCents)}</p>
-                    {p.installments > 1 && <p className="text-xs text-zinc-500">{formatBRL(Math.round(p.totalCents / p.installments))}/mês</p>}
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <section className="card">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="inline-flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
+            <Link href="/compras" className={seg(filtro !== "todas")}>Em aberto</Link>
+            <Link href="/compras?filtro=todas" className={seg(filtro === "todas")}>Todas</Link>
+          </div>
+          <Link href="/compras/nova" className="btn sm:hidden">+ Nova</Link>
+        </div>
+
+        {visible.length === 0 ? (
+          <div className="mt-4 rounded-xl border border-dashed border-zinc-200 p-8 text-center dark:border-zinc-700">
+            <p className="muted text-sm">Nenhuma compra por aqui ainda.</p>
+            <Link href="/compras/nova" className="btn mt-3">Adicionar compra</Link>
+          </div>
+        ) : (
+          <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
+            {visible.map((p) => {
+              const other = memberIds.find((m) => m !== p.paidById)!;
+              const lastMonth = addMonths(p.firstMonth, p.installments - 1);
+              const paidSoFar = Math.max(0, Math.min(p.installments, now - ymToIndex(p.firstMonth) + 1));
+              return (
+                <li key={p.id}>
+                  <Link
+                    href={`/compras/${p.id}`}
+                    className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                  >
+                    <Avatar name={names[p.paidById]} index={memberIds.indexOf(p.paidById)} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2">
+                        <span className="truncate text-sm font-medium">{p.description}</span>
+                        {p.category && (
+                          <span className="pill shrink-0 bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">{p.category}</span>
+                        )}
+                      </p>
+                      <p className="muted truncate text-xs">
+                        Pago por {names[p.paidById]} · {shareLabel(p.payerSharePct, names[p.paidById], names[other])}
+                      </p>
+                      {p.installments > 1 ? (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <span className="h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                            <span className="block h-full rounded-full bg-blue-600" style={{ width: `${pct(paidSoFar, p.installments)}%` }} />
+                          </span>
+                          <span className="shrink-0 text-[11px] text-zinc-400">
+                            {paidSoFar}/{p.installments} · até {formatYm(lastMonth)}
+                          </span>
+                        </div>
+                      ) : (
+                        <p className="text-[11px] text-zinc-400">À vista · {formatYm(p.firstMonth)}</p>
+                      )}
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <p className="tabular text-sm font-semibold">{formatBRL(p.totalCents)}</p>
+                      {p.installments > 1 && (
+                        <p className="tabular text-[11px] text-zinc-500">{p.installments}x {formatBRL(Math.round(p.totalCents / p.installments))}</p>
+                      )}
+                    </div>
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </section>
     </>
   );
 }

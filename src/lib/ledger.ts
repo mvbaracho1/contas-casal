@@ -21,8 +21,30 @@ export interface SettlementLike {
   amountCents: number;
 }
 
+export interface BillLike {
+  id: string;
+  name: string;
+  category?: string | null;
+  amountCents: number;
+  dueDay: number;
+  paidById: string;
+  /** null = proporcional à renda do casal */
+  payerSharePct: number | null;
+  startMonth: Ym;
+  endMonth: Ym | null;
+}
+
+export interface IncomeLike {
+  userId: string;
+  amountCents: number;
+  startMonth: Ym;
+  endMonth: Ym | null;
+}
+
 export interface InstallmentLine {
-  purchaseId: string;
+  kind: "purchase" | "bill";
+  /** id da compra ou da conta fixa */
+  sourceId: string;
   description: string;
   category?: string | null;
   number: number; // 1-based
@@ -71,7 +93,8 @@ export function installmentLine(p: PurchaseLike, month: Ym): InstallmentLine | n
   const amountCents = splitInstallments(p.totalCents, p.installments)[k];
   const otherShareCents = Math.round((amountCents * (100 - p.payerSharePct)) / 100);
   return {
-    purchaseId: p.id,
+    kind: "purchase",
+    sourceId: p.id,
     description: p.description,
     category: p.category,
     number: k + 1,
@@ -89,6 +112,71 @@ export function linesForMonth(purchases: PurchaseLike[], month: Ym): Installment
     .filter((l): l is InstallmentLine => l !== null);
 }
 
+/** Algo com vigência (renda, conta fixa) está ativo no mês? */
+export function activeIn(x: { startMonth: Ym; endMonth: Ym | null }, month: Ym): boolean {
+  const m = ymToIndex(month);
+  return ymToIndex(x.startMonth) <= m && (!x.endMonth || m <= ymToIndex(x.endMonth));
+}
+
+/** Renda total de cada pessoa no mês. */
+export function incomeByUser(incomes: IncomeLike[], month: Ym, memberIds: [string, string]): Record<string, number> {
+  const out: Record<string, number> = { [memberIds[0]]: 0, [memberIds[1]]: 0 };
+  for (const i of incomes) if (activeIn(i, month) && i.userId in out) out[i.userId] += i.amountCents;
+  return out;
+}
+
+/** Parte (%) da renda do casal que é de `userId` (50 se ninguém cadastrou renda). */
+export function incomeSharePct(income: Record<string, number>, userId: string): number {
+  const total = Object.values(income).reduce((a, b) => a + b, 0);
+  return total > 0 ? (income[userId] / total) * 100 : 50;
+}
+
+export function billLine(
+  b: BillLike,
+  month: Ym,
+  income: Record<string, number>,
+  memberIds: [string, string],
+): InstallmentLine | null {
+  if (!activeIn(b, month)) return null;
+  const other = b.paidById === memberIds[0] ? memberIds[1] : memberIds[0];
+  const otherPct = b.payerSharePct === null ? incomeSharePct(income, other) : 100 - b.payerSharePct;
+  const otherShareCents = Math.round((b.amountCents * otherPct) / 100);
+  return {
+    kind: "bill",
+    sourceId: b.id,
+    description: b.name,
+    category: b.category,
+    number: 1,
+    of: 1,
+    amountCents: b.amountCents,
+    paidById: b.paidById,
+    payerShareCents: b.amountCents - otherShareCents,
+    otherShareCents,
+  };
+}
+
+export interface Fixed {
+  bills: BillLike[];
+  incomes: IncomeLike[];
+}
+
+/** Todas as linhas do mês: parcelas de compras + contas fixas. */
+export function allLinesForMonth(
+  purchases: PurchaseLike[],
+  fixed: Fixed | undefined,
+  month: Ym,
+  memberIds: [string, string],
+): InstallmentLine[] {
+  const lines = linesForMonth(purchases, month);
+  if (!fixed) return lines;
+  const income = incomeByUser(fixed.incomes, month, memberIds);
+  for (const b of fixed.bills) {
+    const l = billLine(b, month, income, memberIds);
+    if (l) lines.push(l);
+  }
+  return lines;
+}
+
 /**
  * Saldo líquido de A em relação a B: positivo = B deve a A.
  * Considera parcelas e transferências do mês informado.
@@ -97,10 +185,12 @@ function netForMonth(
   purchases: PurchaseLike[],
   settlements: SettlementLike[],
   month: Ym,
-  aId: string,
+  memberIds: [string, string],
+  fixed?: Fixed,
 ): number {
+  const aId = memberIds[0];
   let net = 0;
-  for (const l of linesForMonth(purchases, month)) {
+  for (const l of allLinesForMonth(purchases, fixed, month, memberIds)) {
     net += l.paidById === aId ? l.otherShareCents : -l.otherShareCents;
   }
   for (const s of settlements) {
@@ -138,9 +228,10 @@ export function summarizeMonth(
   settlements: SettlementLike[],
   month: Ym,
   memberIds: [string, string],
+  fixed?: Fixed,
 ): MonthSummary {
   const [aId, bId] = memberIds;
-  const lines = linesForMonth(purchases, month);
+  const lines = allLinesForMonth(purchases, fixed, month, memberIds);
 
   const paidBy: Record<string, number> = { [aId]: 0, [bId]: 0 };
   const consumptionBy: Record<string, number> = { [aId]: 0, [bId]: 0 };
@@ -153,16 +244,17 @@ export function summarizeMonth(
     grossNet += l.paidById === aId ? l.otherShareCents : -l.otherShareCents;
   }
 
-  const pendingNet = netForMonth(purchases, settlements, month, aId);
+  const pendingNet = netForMonth(purchases, settlements, month, memberIds, fixed);
 
   // Acumulado: do mês mais antigo com movimento até o mês atual
   const target = ymToIndex(month);
   let start = target;
   for (const p of purchases) start = Math.min(start, ymToIndex(p.firstMonth));
   for (const s of settlements) start = Math.min(start, ymToIndex(s.month));
+  for (const b of fixed?.bills ?? []) start = Math.min(start, ymToIndex(b.startMonth));
   let cumNet = 0;
   for (let i = start; i <= target; i++) {
-    cumNet += netForMonth(purchases, settlements, indexToYm(i), aId);
+    cumNet += netForMonth(purchases, settlements, indexToYm(i), memberIds, fixed);
   }
 
   return {
@@ -197,4 +289,18 @@ export function formatYm(ym: Ym): string {
   const [y, m] = ym.split("-").map(Number);
   const name = new Date(y, m - 1, 1).toLocaleString("pt-BR", { month: "long" });
   return `${name.charAt(0).toUpperCase()}${name.slice(1)} de ${y}`;
+}
+
+/**
+ * Mês da fatura em que cai uma compra feita em `date` num cartão.
+ * Compras antes do dia de fechamento entram na fatura que fecha neste mês;
+ * a partir do fechamento, na seguinte. Se o vencimento é antes do fechamento
+ * (ex.: fecha 28, vence 5), a fatura vence no mês seguinte ao fechamento.
+ */
+export function invoiceMonthFor(date: string, closingDay: number, dueDay: number): Ym {
+  const [y, m, d] = date.split("-").map(Number);
+  let idx = y * 12 + (m - 1);
+  if (d >= closingDay) idx += 1;
+  if (dueDay <= closingDay) idx += 1;
+  return indexToYm(idx);
 }

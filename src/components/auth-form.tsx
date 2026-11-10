@@ -31,9 +31,9 @@ export function AuthForm({ mode }: { mode: "login" | "cadastro" }) {
       <Submit className="btn w-full">{mode === "login" ? "Entrar" : "Criar conta"}</Submit>
       <p className="text-center text-sm text-zinc-500">
         {mode === "login" ? (
-          <>Não tem conta? <Link className="font-medium text-emerald-600" href="/cadastro">Cadastre-se</Link></>
+          <>Não tem conta? <Link className="font-medium text-blue-600" href="/cadastro">Cadastre-se</Link></>
         ) : (
-          <>Já tem conta? <Link className="font-medium text-emerald-600" href="/login">Entrar</Link></>
+          <>Já tem conta? <Link className="font-medium text-blue-600" href="/login">Entrar</Link></>
         )}
       </p>
     </form>

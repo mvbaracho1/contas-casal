@@ -95,6 +95,7 @@ const purchaseSchema = z.object({
   purchaseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   paidById: z.string().min(1),
   payerSharePct: z.coerce.number().int().min(0).max(100),
+  cardId: z.string().optional(),
 });
 
 export async function savePurchase(_: FormState, form: FormData): Promise<FormState> {
@@ -107,6 +108,14 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
   if (!totalCents) return { error: "Valor inválido" };
   if (!memberIds.includes(d.paidById)) return { error: "Pagador inválido" };
 
+  let cardId: string | null = null;
+  if (d.cardId) {
+    const card = await prisma.card.findFirst({ where: { id: d.cardId, coupleId: couple.id } });
+    if (!card) return { error: "Cartão inválido" };
+    if (card.ownerId !== d.paidById) return { error: "Esse cartão é de outra pessoa" };
+    cardId = card.id;
+  }
+
   const data = {
     description: d.description,
     category: d.category || null,
@@ -116,6 +125,7 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     purchaseDate: new Date(`${d.purchaseDate}T12:00:00Z`),
     paidById: d.paidById,
     payerSharePct: d.payerSharePct,
+    cardId,
   };
 
   const id = String(form.get("id") ?? "");
