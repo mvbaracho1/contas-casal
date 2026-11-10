@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model Couple {
+  id          String       @id @default(cuid())
+  name        String
+  inviteCode  String       @unique
+  createdAt   DateTime     @default(now())
+  members     User[]
+  purchases   Purchase[]
+  settlements Settlement[]
+}
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  coupleId     String?
+  couple       Couple?  @relation(fields: [coupleId], references: [id])
+  createdAt    DateTime @default(now())
+
+  paidPurchases    Purchase[]   @relation("PaidBy")
+  settlementsSent  Settlement[] @relation("SettlementFrom")
+  settlementsRecvd Settlement[] @relation("SettlementTo")
+}
+
+/// Uma compra (à vista ou parcelada).
+/// `paidById` = quem pagou / dono do cartão.
+/// `payerSharePct` = quanto (%) da compra é responsabilidade de quem pagou.
+///   50  -> dividida meio a meio
+///   0   -> é toda do outro (ex.: esposa comprou no cartão do marido)
+///   100 -> é toda de quem pagou (não gera dívida)
+model Purchase {
+  id            String   @id @default(cuid())
+  coupleId      String
+  couple        Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  description   String
+  category      String?
+  totalCents    Int
+  installments  Int      @default(1)
+  /// Mês da 1ª parcela no formato YYYY-MM (mês da fatura)
+  firstMonth    String
+  purchaseDate  DateTime
+  paidById      String
+  paidBy        User     @relation("PaidBy", fields: [paidById], references: [id])
+  payerSharePct Int      @default(50)
+  createdAt     DateTime @default(now())
+
+  @@index([coupleId, firstMonth])
+}
+
+/// Transferência feita de um para o outro para acertar as contas de um mês.
+model Settlement {
+  id          String   @id @default(cuid())
+  coupleId    String
+  couple      Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  month       String
+  fromId      String
+  from        User     @relation("SettlementFrom", fields: [fromId], references: [id])
+  toId        String
+  to          User     @relation("SettlementTo", fields: [toId], references: [id])
+  amountCents Int
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([coupleId, month])
+}
