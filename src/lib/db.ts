@@ -1,3 +1,6 @@
+// Garante que o banco (e DATABASE_URL) nunca vá para o bundle do navegador:
+// importar este módulo num componente "use client" quebra o build.
+import "server-only";
 import { PrismaClient } from "@prisma/client";
 
 const g = globalThis as unknown as { prisma?: PrismaClient };
