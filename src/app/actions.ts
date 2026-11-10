@@ -40,7 +40,10 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   const email = String(form.get("email") ?? "").trim().toLowerCase();
   const password = String(form.get("password") ?? "");
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  if (user && !user.passwordHash) {
+    return { error: "Essa conta entra com o Google. Use o botão do Google ou crie uma senha em “Esqueci minha senha”." };
+  }
+  if (!user || !user.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     return { error: "E-mail ou senha incorretos" };
   }
   await startSession(user.id);

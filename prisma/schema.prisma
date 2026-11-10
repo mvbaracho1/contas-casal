@@ -26,7 +26,9 @@ model User {
   id           String   @id @default(cuid())
   name         String
   email        String   @unique
-  passwordHash String
+  /// null para quem só entra com Google
+  passwordHash String?
+  googleId     String?  @unique
   coupleId     String?
   couple       Couple?  @relation(fields: [coupleId], references: [id])
   createdAt    DateTime @default(now())
@@ -37,6 +39,7 @@ model User {
   incomes          Income[]
   cards            Card[]
   bills            Bill[]
+  resetTokens      PasswordResetToken[]
 }
 
 /// Uma compra (à vista ou parcelada).
@@ -154,4 +157,17 @@ model PaidMark {
   @@unique([billId, month])
   @@unique([cardId, month])
   @@index([coupleId, month])
+}
+
+/// Link de recuperação de senha. Guardamos só o hash do token; vale 1 hora e uma vez.
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }

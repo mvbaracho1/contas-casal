@@ -18,6 +18,12 @@ Controle de compras, parcelamentos e acertos mensais de um casal: quem pagou, de
 - **Contas a pagar**: contas fixas e faturas do mês, que podem ser marcadas como pagas.
 - O **Resumo** de cada mês compensa o que um deve ao outro e mostra quem envia quanto para quem. Depois do Pix, registre a **transferência** e o mês fica zerado. Se ficou algo pendente de meses anteriores, o resumo avisa.
 
+## Login, Google e recuperação de senha
+
+- **E-mail e senha** sempre funcionam. A sessão é um cookie assinado com `AUTH_SECRET`.
+- **Esqueci minha senha**: envia um link de uso único que vale 1 hora (o token é guardado só como hash). O envio usa o [Resend](https://resend.com) (`RESEND_API_KEY` e `EMAIL_FROM`). Sem essas variáveis, em desenvolvimento o link aparece no terminal.
+- **Entrar com o Google**: o botão aparece quando `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` estão definidos. No Google Cloud Console, cadastre o URI de redirecionamento `https://SEU-DOMINIO/api/auth/google/callback`. Se o e-mail do Google já tiver conta, as duas são ligadas.
+
 ## Rodando localmente
 
 ```bash
