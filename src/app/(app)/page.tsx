@@ -77,6 +77,13 @@ export default async function VisaoGeralPage({
   const friendByPurchase = new Map(receivables.filter((r) => r.purchaseId).map((r) => [r.purchaseId!, r.personName.trim()]));
   const friendTotal = friendGroups.reduce((a, g) => a + g.amount, 0);
   const friendPaid = friendGroups.reduce((a, g) => a + g.paid, 0);
+  // atalho "nova compra de amigo": já com o mês do painel (e o nome, nos chips de quem já comprou com vocês)
+  const newFriendHref = (name?: string) => `/compras/nova?amigo=${encodeURIComponent(name || "1")}&mes=${month}`;
+  const knownFriends = [...new Map(
+    [...receivables]
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((r) => [r.personName.trim().toLowerCase(), r.personName.trim()] as const),
+  ).values()].slice(0, 6);
   const friendOpenAll = receivables.reduce((a, r) => a + summarizeReceivable(r, r.payments, currentYm()).remainingCents, 0);
   const s = summarizeMonth(purchases, settlements, month, memberIds, { bills, incomes });
   const monthSettlements = settlements.filter((x) => x.month === month);
@@ -559,7 +566,7 @@ export default async function VisaoGeralPage({
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="card-title">Compras de amigos</h2>
-              <p className="muted text-xs">O que terceiros devem na fatura de {mp.name.toLowerCase()}</p>
+              <p className="muted text-xs">O que terceiros devem em {mp.name.toLowerCase()}</p>
             </div>
             <div className="flex items-center gap-3">
               {friendTotal > 0 && (
@@ -570,14 +577,15 @@ export default async function VisaoGeralPage({
                   </p>
                 </div>
               )}
-              <span className="text-3xl" aria-hidden>🤝</span>
+              <Link href={newFriendHref()} className="btn shrink-0 px-3 py-2 text-sm">+ Nova</Link>
             </div>
           </div>
 
           {friendGroups.length === 0 ? (
-            <p className="mt-3 rounded-xl border border-dashed border-zinc-200 px-4 py-3 text-center text-sm text-zinc-500 dark:border-zinc-700">
-              Nenhuma compra de amigo nesta fatura. Ao lançar ou importar uma compra, escolha <b>“De um amigo”</b>.
-            </p>
+            <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-200 px-4 py-4 text-center text-sm text-zinc-500 dark:border-zinc-700">
+              <p>Nenhuma compra de amigo nesta fatura.</p>
+              <Link href={newFriendHref()} className="btn-outline px-3 py-1.5 text-xs">🤝 Lançar compra de um amigo</Link>
+            </div>
           ) : (
             <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
               {friendGroups.map((g) => {
@@ -625,6 +633,20 @@ export default async function VisaoGeralPage({
                 );
               })}
             </ul>
+          )}
+          {knownFriends.length > 0 && (
+            <div className="mt-3 flex flex-wrap items-center gap-1.5 text-xs">
+              <span className="muted">Nova compra para:</span>
+              {knownFriends.map((name) => (
+                <Link
+                  key={name}
+                  href={newFriendHref(name)}
+                  className="rounded-full border border-zinc-200 px-2.5 py-1 font-medium transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-zinc-700 dark:hover:border-blue-800 dark:hover:bg-blue-950 dark:hover:text-blue-300"
+                >
+                  + {name}
+                </Link>
+              ))}
+            </div>
           )}
           {friendOpenAll > friendTotal - friendPaid && (
             <Link href="/receber" className="mt-3 inline-flex text-xs font-semibold text-blue-600 dark:text-blue-400">

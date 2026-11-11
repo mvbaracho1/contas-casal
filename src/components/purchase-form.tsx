@@ -208,7 +208,7 @@ export function PurchaseForm({
           <button type="button" className={chip(mode === "custom")} onClick={() => { setFriend(null); if (mode !== "custom") setPct(60); }}>Personalizado</button>
           <button type="button" className={`col-span-2 sm:col-span-4 ${chip(mode === "friend")}`} onClick={() => { setFriend(friend ?? ""); setPct(100); }}>
             🤝 De um amigo (a receber)
-            <span className="block text-xs font-normal text-zinc-500 dark:text-zinc-400">Alguém de fora usou o cartão. Vai para “A receber” e não entra no acerto do casal.</span>
+            <span className="block text-xs font-normal text-zinc-500 dark:text-zinc-400">Compra para alguém de fora, no cartão ou não. Vai para “A receber” e não entra no acerto do casal.</span>
           </button>
         </div>
         {mode === "friend" && (

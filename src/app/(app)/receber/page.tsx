@@ -66,7 +66,7 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
     <>
       <PageHeader
         title="A receber"
-        subtitle="Compras de amigos no cartão e outros valores que te devem"
+        subtitle="Compras de amigos e outros valores que te devem"
         addButton={false}
         actions={(ver || editar) && <Link href="/receber" className="btn hidden sm:inline-flex">+ Novo</Link>}
       />
@@ -108,7 +108,7 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
           {groups.size === 0 && (
             <div className="card text-center">
               <p className="muted text-sm">
-                {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Cadastre aqui, ou marque “De um amigo” ao lançar ou importar uma compra do cartão."}
+                {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Cadastre aqui, ou marque “De um amigo” ao lançar ou importar uma compra."}
               </p>
             </div>
           )}
@@ -205,7 +205,7 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
           <h2 className="truncate text-base font-semibold">{r.description}</h2>
           {r.purchase && (
             <Link href={`/compras/${r.purchase.id}`} className="text-xs font-medium text-blue-600 dark:text-blue-400">
-              Compra no cartão{r.purchase.card ? ` ${r.purchase.card.name}` : ""} →
+              {r.purchase.card ? `Compra no cartão ${r.purchase.card.name}` : "Ver a compra"} →
             </Link>
           )}
         </div>
@@ -282,7 +282,7 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
           <input type="hidden" name="id" value={r.id} />
           <ConfirmButton
             className="btn-danger" title="Excluir valor a receber?"
-            message={<><b>{r.description}</b> ({r.personName}) e os recebimentos registrados serão apagados.{r.purchase && " A compra no cartão continua."}</>}
+            message={<><b>{r.description}</b> ({r.personName}) e os recebimentos registrados serão apagados.{r.purchase && " A compra continua."}</>}
           >
             <IconTrash /> Excluir
           </ConfirmButton>
