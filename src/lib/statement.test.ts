@@ -148,3 +148,22 @@ describe("assinatura já cadastrada", () => {
     expect(isDuplicate({ ...item, amountCents: 6490 }, "2026-12", "c1", [sub])).toBe(false);
   });
 });
+
+describe("lojas com nome parecido com linha de resumo", () => {
+  it("lê TOTALPASS (não é o 'Total' da fatura)", () => {
+    const csv = "data,descricao,valor,parcela\n30/09/2026,TOTALPASS,59.90,\n11/10/2026,TOTALPASS,69.90,\n05/10/2026,LOJA X,10.00,02/03\n20/10/2026,LOJA Y (crédito),-5.00,";
+    const r = parseCsv(csv, "2026-11");
+    expect(r.items.filter((i) => i.kind === "charge").map((i) => [i.description, i.amountCents])).toEqual([
+      ["TOTALPASS", 5990],
+      ["TOTALPASS", 6990],
+      ["LOJA X", 1000],
+    ]);
+    expect(r.items.find((i) => i.description === "LOJA X")?.installment).toEqual({ k: 2, n: 3 });
+    expect(r.items.filter((i) => i.kind === "credit")).toHaveLength(1);
+  });
+  it("continua ignorando as linhas de resumo", () => {
+    expect(parseStatementLine("10/11 Total da fatura 1.234,56", "2026-11")).toEqual([]);
+    expect(parseStatementLine("10/11 Saldo anterior 500,00", "2026-11")).toEqual([]);
+    expect(parseStatementLine("10/11 TOTALPASS 59,90", "2026-11")).toHaveLength(1);
+  });
+});
