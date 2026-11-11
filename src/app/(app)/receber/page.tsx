@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { chargeMessage, summarizeReceivable, whatsappLink, type InstallmentStatus, type ReceivableSummary } from "@/lib/receivables";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
 export const metadata = { title: "A receber · Contas do Casal" };
 
@@ -25,9 +26,9 @@ const ROW: Record<InstallmentStatus, { label: string; cls: string }> = {
   "a-vencer": { label: "A vencer", cls: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300" },
 };
 
-export default async function ReceberPage({ searchParams }: { searchParams: Promise<{ ver?: string; editar?: string; filtro?: string }> }) {
+// ?filtro=todos, ?ver=ID e ?editar=ID trocam no navegador (url-state): tudo já vem pronto do servidor.
+export default async function ReceberPage() {
   const { couple, me, memberIds, names } = await requireCouple();
-  const { ver, editar, filtro = "abertos" } = await searchParams;
   const today = currentYm();
 
   const list = await prisma.receivable.findMany({
@@ -40,7 +41,6 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
   });
   const items = list.map((r) => ({ r, s: summarizeReceivable(r, r.payments, today) }));
   const open = items.filter((x) => x.s.status !== "quitado");
-  const visible = filtro === "todos" ? items : open;
 
   const totalOpen = open.reduce((a, x) => a + x.s.remainingCents, 0);
   const totalOverdue = open.reduce((a, x) => a + x.s.overdueCents, 0);
@@ -48,19 +48,26 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
   const byCreditor = memberIds.map((id) => ({ id, cents: open.filter((x) => x.r.creditorId === id).reduce((a, x) => a + x.s.remainingCents, 0) }));
 
   // agrupa por pessoa (ignorando maiúsculas e espaços)
-  const groups = new Map<string, { name: string; items: typeof items }>();
-  for (const x of visible) {
-    const key = x.r.personName.trim().toLowerCase();
-    if (!groups.has(key)) groups.set(key, { name: x.r.personName.trim(), items: [] });
-    groups.get(key)!.items.push(x);
-  }
+  const groupBy = (visible: typeof items) => {
+    const groups = new Map<string, { name: string; items: typeof items }>();
+    for (const x of visible) {
+      const key = x.r.personName.trim().toLowerCase();
+      if (!groups.has(key)) groups.set(key, { name: x.r.personName.trim(), items: [] });
+      groups.get(key)!.items.push(x);
+    }
+    return groups;
+  };
   const people = [...new Set(list.map((r) => r.personName.trim()))].sort();
 
-  const selected = items.find((x) => x.r.id === ver);
-  const editing = list.find((r) => r.id === editar);
-
-  const seg = (on: boolean) =>
-    `rounded-lg px-3 py-1.5 text-xs font-semibold transition ${on ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-white"}`;
+  const seg = "rounded-lg px-3 py-1.5 text-xs font-semibold transition";
+  const segOn = "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white";
+  const segOff = "text-zinc-500 hover:text-zinc-900 dark:hover:text-white";
+  // "+ Novo" aparece quando há algo aberto no painel (detalhe ou edição)
+  const newLink = (cls: string) => (
+    <ParamView not when={{ ver: [""], editar: [""] }}>
+      <ParamLink param="ver" value="" clear={["editar"]} className={cls}>+ Novo</ParamLink>
+    </ParamView>
+  );
 
   return (
     <>
@@ -68,7 +75,7 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
         title="A receber"
         subtitle="Compras de amigos e outros valores que te devem"
         addButton={false}
-        actions={(ver || editar) && <Link href="/receber" className="btn hidden sm:inline-flex">+ Novo</Link>}
+        actions={newLink("btn hidden sm:inline-flex")}
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
         <div className="min-w-0 space-y-4">
@@ -99,91 +106,106 @@ export default async function ReceberPage({ searchParams }: { searchParams: Prom
 
           <div className="flex items-center justify-between gap-2">
             <div className="inline-flex rounded-xl bg-zinc-100 p-1 dark:bg-zinc-800">
-              <Link href="/receber" className={seg(filtro !== "todos")}>Em aberto · {open.length}</Link>
-              <Link href="/receber?filtro=todos" className={seg(filtro === "todos")}>Todos · {items.length}</Link>
+              <ParamLink param="filtro" value="" className={seg} activeClassName={segOn} inactiveClassName={segOff}>Em aberto · {open.length}</ParamLink>
+              <ParamLink param="filtro" value="todos" className={seg} activeClassName={segOn} inactiveClassName={segOff}>Todos · {items.length}</ParamLink>
             </div>
-            {(ver || editar) && <Link href="/receber" className="btn sm:hidden">+ Novo</Link>}
+            {newLink("btn sm:hidden")}
           </div>
 
-          {groups.size === 0 && (
-            <div className="card text-center">
-              <p className="muted text-sm">
-                {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Cadastre aqui, ou marque “De um amigo” ao lançar ou importar uma compra."}
-              </p>
-            </div>
-          )}
-
-          {[...groups.values()].map((g) => {
-            const owed = g.items.reduce((a, x) => a + x.s.remainingCents, 0);
-            const late = g.items.some((x) => x.s.status === "atrasado");
-            return (
-              <section key={g.name} className="card">
-                <div className="flex items-center gap-3">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
-                    {g.name.charAt(0).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <h2 className="card-title truncate">{g.name}</h2>
-                    <p className="muted text-xs">{g.items.length} {g.items.length === 1 ? "registro" : "registros"}{late && " · tem valor vencido"}</p>
-                  </div>
-                  <p className={`tabular text-sm font-semibold ${late ? "text-red-600 dark:text-red-400" : ""}`}>{formatBRL(owed)}</p>
+          {[
+            { key: "", groups: groupBy(open) },
+            { key: "todos", groups: groupBy(items) },
+          ].map(({ key, groups }) => (
+            <ParamView key={key || "abertos"} param="filtro" values={[key]}>
+              <div className="space-y-4">
+              {groups.size === 0 && (
+                <div className="card text-center">
+                  <p className="muted text-sm">
+                    {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Cadastre aqui, ou marque “De um amigo” ao lançar ou importar uma compra."}
+                  </p>
                 </div>
-                <ul className="mt-2 divide-y divide-zinc-100 dark:divide-zinc-800">
-                  {g.items.map(({ r, s }) => (
-                    <li key={r.id}>
-                      <Link
-                        href={`/receber?ver=${r.id}${filtro === "todos" ? "&filtro=todos" : ""}`}
-                        className={`-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${r.id === ver ? "bg-zinc-50 dark:bg-zinc-800/60" : ""}`}
-                      >
-                        <Avatar name={names[r.creditorId]} index={memberIds.indexOf(r.creditorId)} size="sm" />
-                        <div className="min-w-0 flex-1">
-                          <p className="flex items-center gap-2">
-                            <span className="truncate text-sm font-medium">{r.description}</span>
-                            <span className={`pill shrink-0 ${STATUS[s.status].cls}`}>{STATUS[s.status].label}</span>
-                          </p>
-                          <div className="mt-1.5 flex items-center gap-2">
-                            <span className="h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
-                              <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${pct(s.paidCents, s.owedCents)}%` }} />
-                            </span>
-                            <span className="shrink-0 text-[11px] text-zinc-400">
-                              {r.installments > 1 ? `${s.rows.filter((x) => x.status === "pago").length}/${s.rows.length} parcelas` : s.status === "quitado" ? "recebido" : formatYm(r.firstMonth)}
-                              {r.purchase?.card && ` · ${r.purchase.card.name}`}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="shrink-0 text-right">
-                          <p className="tabular text-sm font-semibold">{formatBRL(s.remainingCents)}</p>
-                          <p className="tabular text-[11px] text-zinc-500">de {formatBRL(s.owedCents)}</p>
-                        </div>
-                      </Link>
-                    </li>
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
+              )}
+
+              {[...groups.values()].map((g) => {
+                const owed = g.items.reduce((a, x) => a + x.s.remainingCents, 0);
+                const late = g.items.some((x) => x.s.status === "atrasado");
+                return (
+                  <section key={g.name} className="card">
+                    <div className="flex items-center gap-3">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-sm font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                        {g.name.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <h2 className="card-title truncate">{g.name}</h2>
+                        <p className="muted text-xs">{g.items.length} {g.items.length === 1 ? "registro" : "registros"}{late && " · tem valor vencido"}</p>
+                      </div>
+                      <p className={`tabular text-sm font-semibold ${late ? "text-red-600 dark:text-red-400" : ""}`}>{formatBRL(owed)}</p>
+                    </div>
+                    <ul className="mt-2 divide-y divide-zinc-100 dark:divide-zinc-800">
+                      {g.items.map(({ r, s }) => (
+                        <li key={r.id}>
+                          <ParamLink
+                            param="ver" value={r.id} push scrollTo="painel" clear={["editar"]}
+                            className="-mx-2 flex items-center gap-3 rounded-xl px-2 py-3 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60"
+                            activeClassName="bg-zinc-50 dark:bg-zinc-800/60"
+                          >
+                            <Avatar name={names[r.creditorId]} index={memberIds.indexOf(r.creditorId)} size="sm" />
+                            <div className="min-w-0 flex-1">
+                              <p className="flex items-center gap-2">
+                                <span className="truncate text-sm font-medium">{r.description}</span>
+                                <span className={`pill shrink-0 ${STATUS[s.status].cls}`}>{STATUS[s.status].label}</span>
+                              </p>
+                              <div className="mt-1.5 flex items-center gap-2">
+                                <span className="h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
+                                  <span className="block h-full rounded-full bg-emerald-500" style={{ width: `${pct(s.paidCents, s.owedCents)}%` }} />
+                                </span>
+                                <span className="shrink-0 text-[11px] text-zinc-400">
+                                  {r.installments > 1 ? `${s.rows.filter((x) => x.status === "pago").length}/${s.rows.length} parcelas` : s.status === "quitado" ? "recebido" : formatYm(r.firstMonth)}
+                                  {r.purchase?.card && ` · ${r.purchase.card.name}`}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="shrink-0 text-right">
+                              <p className="tabular text-sm font-semibold">{formatBRL(s.remainingCents)}</p>
+                              <p className="tabular text-[11px] text-zinc-500">de {formatBRL(s.owedCents)}</p>
+                            </div>
+                          </ParamLink>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                );
+              })}
+              </div>
+            </ParamView>
+          ))}
         </div>
 
-        <div className={selected || editing ? "order-first space-y-4 lg:order-none" : "space-y-4"}>
-          {selected ? (
-            <Detail item={selected} names={names} filtro={filtro} />
-          ) : (
-            <ReceivableForm
-              key={editing?.id ?? "new"}
-              members={couple.members}
-              people={people}
-              defaults={
-                editing
-                  ? {
-                      id: editing.id, personName: editing.personName, description: editing.description, totalCents: editing.totalCents,
-                      installments: editing.installments, firstMonth: editing.firstMonth, creditorId: editing.creditorId, note: editing.note,
-                      linkedPurchaseId: editing.purchaseId,
-                    }
-                  : { firstMonth: today, creditorId: me.id }
-              }
-            />
-          )}
-        </div>
+        <ParamClass not when={{ ver: [""], editar: [""] }} className="space-y-4 scroll-mt-4" activeClassName="order-first lg:order-none">
+          <div id="painel" className="scroll-mt-20" />
+          {items.map((item) => (
+            <ParamView key={item.r.id} param="ver" values={[item.r.id]}>
+              <Detail item={item} names={names} />
+            </ParamView>
+          ))}
+          {list.map((editing) => (
+            <ParamView key={editing.id} when={{ ver: [""], editar: [editing.id] }}>
+              <ReceivableForm
+                key={editing.id}
+                members={couple.members}
+                people={people}
+                defaults={{
+                  id: editing.id, personName: editing.personName, description: editing.description, totalCents: editing.totalCents,
+                  installments: editing.installments, firstMonth: editing.firstMonth, creditorId: editing.creditorId, note: editing.note,
+                  linkedPurchaseId: editing.purchaseId,
+                }}
+              />
+            </ParamView>
+          ))}
+          <ParamView when={{ ver: [""], editar: [""] }}>
+            <ReceivableForm key="new" members={couple.members} people={people} defaults={{ firstMonth: today, creditorId: me.id }} />
+          </ParamView>
+        </ParamClass>
       </div>
     </>
   );
@@ -194,7 +216,7 @@ type Item = {
   s: ReceivableSummary;
 };
 
-function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<string, string>; filtro: string }) {
+function Detail({ item: { r, s }, names }: { item: Item; names: Record<string, string> }) {
   const msg = chargeMessage(r, s);
   const suggested = s.dueNowCents > 0 ? s.dueNowCents : s.next ? s.next.amountCents - s.next.paidCents : 0;
   return (
@@ -209,7 +231,7 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
             </Link>
           )}
         </div>
-        <Link href={`/receber${filtro === "todos" ? "?filtro=todos" : ""}`} className="btn-icon" aria-label="Fechar">✕</Link>
+        <ParamLink param="ver" value="" className="btn-icon" aria-label="Fechar">✕</ParamLink>
       </div>
 
       <div>
@@ -277,7 +299,7 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
       )}
 
       <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-        <Link href={`/receber?editar=${r.id}`} className="btn-outline py-2 text-sm">Editar</Link>
+        <ParamLink param="editar" value={r.id} push scrollTo="painel" clear={["ver"]} className="btn-outline py-2 text-sm">Editar</ParamLink>
         <form action={deleteReceivable}>
           <input type="hidden" name="id" value={r.id} />
           <ConfirmButton

@@ -6,6 +6,7 @@ import { addReceivablePayment, saveReceivable } from "@/app/actions-receivables"
 import { formatBRL, parseBRL, splitInstallments } from "@/lib/ledger";
 import { CopyButton } from "./couple-forms";
 import { Message, Submit } from "./form-bits";
+import { ParamLink } from "./url-state";
 
 type Member = { id: string; name: string };
 
@@ -41,7 +42,7 @@ export function ReceivableForm({ members, people, defaults }: { members: Member[
     <div className="card space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="card-title">{defaults.id ? "Editar valor a receber" : "Novo valor a receber"}</h2>
-        {defaults.id && <Link href={`/receber?ver=${defaults.id}`} className="text-xs font-medium text-blue-600">Cancelar</Link>}
+        {defaults.id && <ParamLink param="ver" value={defaults.id!} clear={["editar"]} className="text-xs font-medium text-blue-600">Cancelar</ParamLink>}
       </div>
       <form action={action} className="space-y-4">
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}

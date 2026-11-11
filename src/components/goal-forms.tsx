@@ -1,11 +1,11 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useEffect, useState } from "react";
 import { addGoalEntry, saveGoal } from "@/app/actions-goals";
 import { GOAL_EMOJIS, GOAL_TEMPLATES } from "@/lib/goals";
 import { formatBRL, parseBRL } from "@/lib/ledger";
 import { Message, Submit } from "./form-bits";
+import { ParamLink } from "./url-state";
 
 type Member = { id: string; name: string };
 
@@ -41,7 +41,7 @@ export function GoalForm({ defaults, emergencyCents }: { defaults: GoalDefaults;
     <div className="card space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="card-title">{editing ? "Editar meta" : "Nova meta"}</h2>
-        {editing && <Link href={`/metas?ver=${defaults.id}`} className="text-xs font-medium text-blue-600">Cancelar</Link>}
+        {editing && <ParamLink param="ver" value={defaults.id!} clear={["editar"]} className="text-xs font-medium text-blue-600">Cancelar</ParamLink>}
       </div>
 
       {!editing && (

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { deleteGoal, deleteGoalEntry } from "@/app/actions-goals";
 import { GoalEntryForm, GoalForm } from "@/components/goal-forms";
 import { IconTrash } from "@/components/icons";
@@ -9,6 +8,7 @@ import { prisma } from "@/lib/db";
 import { emergencyFundSuggestion, summarizeGoal, type GoalSummary } from "@/lib/goals";
 import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
 export const metadata = { title: "Metas · Contas do Casal" };
 
@@ -26,9 +26,9 @@ function Progress({ pct, done, className = "h-2" }: { pct: number; done: boolean
   );
 }
 
-export default async function MetasPage({ searchParams }: { searchParams: Promise<{ ver?: string; editar?: string; nova?: string }> }) {
+// ?ver=ID, ?editar=ID e ?nova=1 trocam no navegador (url-state): tudo já vem pronto do servidor.
+export default async function MetasPage() {
   const { couple, me, memberIds, names } = await requireCouple();
-  const { ver, editar, nova } = await searchParams;
   const today = currentYm();
 
   const [goals, bills] = await Promise.all([
@@ -45,9 +45,11 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
   const monthly = items.reduce((a, x) => a + (x.s.monthlyCents ?? 0), 0);
   const emergencyCents = emergencyFundSuggestion(bills.filter((b) => activeIn(b, today)).reduce((a, b) => a + b.amountCents, 0));
 
-  const selected = items.find((x) => x.g.id === ver);
-  const editing = goals.find((g) => g.id === editar);
-  const showForm = !selected && (editing || nova || goals.length === 0);
+  // "+ Nova meta": abre o formulário no painel
+  const newLink = (cls: string) => (
+    <ParamLink param="nova" value="1" push scrollTo="painel" clear={["ver", "editar"]} className={cls}>+ Nova meta</ParamLink>
+  );
+  const nothingOpen = { ver: [""], editar: [""], nova: [""] };
 
   return (
     <>
@@ -55,7 +57,7 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
         title="Metas"
         subtitle="Viagem, reserva de emergência e o que mais vocês querem juntar"
         addButton={false}
-        actions={<Link href="/metas?nova=1" className="btn hidden sm:inline-flex">+ Nova meta</Link>}
+        actions={newLink("btn hidden sm:inline-flex")}
       />
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
         <div className="min-w-0 space-y-4">
@@ -80,16 +82,17 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
 
           <div className="flex items-center justify-between sm:hidden">
             <span className="muted text-xs">{goals.length} {goals.length === 1 ? "meta" : "metas"}</span>
-            <Link href="/metas?nova=1" className="btn">+ Nova meta</Link>
+            {newLink("btn")}
           </div>
 
           {items.length > 0 && (
             <ul className="grid gap-3 sm:grid-cols-2">
               {items.map(({ g, s }) => (
                 <li key={g.id}>
-                  <Link
-                    href={`/metas?ver=${g.id}`}
-                    className={`card flex h-full flex-col gap-3 transition hover:border-blue-300 dark:hover:border-blue-800 ${g.id === ver ? "ring-2 ring-blue-500" : ""}`}
+                  <ParamLink
+                    param="ver" value={g.id} push scrollTo="painel" clear={["editar", "nova"]}
+                    className="card flex h-full flex-col gap-3 transition hover:border-blue-300 dark:hover:border-blue-800"
+                    activeClassName="ring-2 ring-blue-500"
                   >
                     <div className="flex items-start gap-3">
                       <span className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-zinc-100 text-2xl dark:bg-zinc-800" aria-hidden>{g.emoji}</span>
@@ -116,29 +119,47 @@ export default async function MetasPage({ searchParams }: { searchParams: Promis
                         )}
                       </div>
                     </div>
-                  </Link>
+                  </ParamLink>
                 </li>
               ))}
             </ul>
           )}
         </div>
 
-        <div className={selected || showForm ? "order-first space-y-4 lg:order-none" : "space-y-4"}>
-          {selected ? (
-            <Detail item={selected} memberIds={memberIds} names={names} meId={me.id} members={couple.members} />
-          ) : showForm ? (
-            <GoalForm
-              key={editing?.id ?? "new"}
-              emergencyCents={emergencyCents}
-              defaults={editing ? { id: editing.id, name: editing.name, emoji: editing.emoji, targetCents: editing.targetCents, targetMonth: editing.targetMonth, note: editing.note } : {}}
-            />
-          ) : (
-            <div className="card hidden text-center lg:block">
-              <p className="muted text-sm">Escolha uma meta para ver os aportes, ou crie uma nova.</p>
-              <Link href="/metas?nova=1" className="btn mt-3">+ Nova meta</Link>
-            </div>
+        <ParamClass
+          not={goals.length > 0}
+          when={goals.length > 0 ? nothingOpen : {}}
+          className="space-y-4"
+          activeClassName="order-first lg:order-none"
+        >
+          <div id="painel" className="scroll-mt-20" />
+          {items.map((item) => (
+            <ParamView key={item.g.id} param="ver" values={[item.g.id]}>
+              <Detail item={item} memberIds={memberIds} names={names} meId={me.id} members={couple.members} />
+            </ParamView>
+          ))}
+          {goals.map((editing) => (
+            <ParamView key={editing.id} when={{ ver: [""], editar: [editing.id] }}>
+              <GoalForm
+                key={editing.id}
+                emergencyCents={emergencyCents}
+                defaults={{ id: editing.id, name: editing.name, emoji: editing.emoji, targetCents: editing.targetCents, targetMonth: editing.targetMonth, note: editing.note }}
+              />
+            </ParamView>
+          ))}
+          {/* sem nenhuma meta, o formulário já aparece aberto */}
+          <ParamView when={{ ver: [""], editar: [""], nova: goals.length === 0 ? ["", "1"] : ["1"] }}>
+            <GoalForm key="new" emergencyCents={emergencyCents} defaults={{}} />
+          </ParamView>
+          {goals.length > 0 && (
+            <ParamView when={nothingOpen}>
+              <div className="card hidden text-center lg:block">
+                <p className="muted text-sm">Escolha uma meta para ver os aportes, ou crie uma nova.</p>
+                {newLink("btn mt-3")}
+              </div>
+            </ParamView>
           )}
-        </div>
+        </ParamClass>
       </div>
     </>
   );
@@ -167,7 +188,7 @@ function Detail({ item: { g, s }, memberIds, names, meId, members }: {
           <h2 className="truncate text-base font-semibold">{g.name}</h2>
           <span className={`pill mt-1 ${STATUS[s.status].cls}`}>{STATUS[s.status].label}</span>
         </div>
-        <Link href="/metas" className="btn-icon" aria-label="Fechar">✕</Link>
+        <ParamLink param="ver" value="" className="btn-icon" aria-label="Fechar">✕</ParamLink>
       </div>
 
       <div>
@@ -254,7 +275,7 @@ function Detail({ item: { g, s }, memberIds, names, meId, members }: {
       )}
 
       <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-        <Link href={`/metas?editar=${g.id}`} className="btn-outline py-2 text-sm">Editar meta</Link>
+        <ParamLink param="editar" value={g.id} push scrollTo="painel" clear={["ver", "nova"]} className="btn-outline py-2 text-sm">Editar meta</ParamLink>
         <form action={deleteGoal}>
           <input type="hidden" name="id" value={g.id} />
           <ConfirmButton className="btn-danger" title="Excluir meta?" message={<>A meta <b>{g.emoji} {g.name}</b> e todos os aportes serão apagados.</>}>

@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { deleteIncome } from "@/app/actions-finance";
 import { IncomeForm } from "@/components/finance-forms";
 import { IconTrash } from "@/components/icons";
@@ -8,15 +7,15 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { activeIn, currentYm, formatBRL, formatYm, incomeByUser } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
-export default async function RendaPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
+// ?editar=ID troca no navegador (url-state): os formulários de edição já vêm prontos do servidor.
+export default async function RendaPage() {
   const { couple, me, memberIds, names } = await requireCouple();
-  const { editar } = await searchParams;
   const incomes = await prisma.income.findMany({ where: { coupleId: couple.id }, orderBy: [{ startMonth: "desc" }, { createdAt: "asc" }] });
   const month = currentYm();
   const byUser = incomeByUser(incomes, month, memberIds);
   const total = byUser[memberIds[0]] + byUser[memberIds[1]];
-  const editing = incomes.find((i) => i.id === editar);
 
   return (
     <>
@@ -66,14 +65,14 @@ export default async function RendaPage({ searchParams }: { searchParams: Promis
                   return (
                     <li key={i.id} className={`flex items-center gap-3 py-3 ${active ? "" : "opacity-60"}`}>
                       <Avatar name={names[i.userId]} index={memberIds.indexOf(i.userId)} />
-                      <Link href={`/renda?editar=${i.id}`} className="min-w-0 flex-1">
+                      <ParamLink param="editar" value={i.id} push scrollTo="painel" className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{i.description}</p>
                         <p className="muted truncate text-xs">
                           {names[i.userId]} · desde {formatYm(i.startMonth)}
                           {i.endMonth && ` até ${formatYm(i.endMonth)}`}
                           {!active && " · fora do período"}
                         </p>
-                      </Link>
+                      </ParamLink>
                       <span className="tabular text-sm font-semibold">{formatBRL(i.amountCents)}</span>
                       <form action={deleteIncome}>
                         <input type="hidden" name="id" value={i.id} />
@@ -92,17 +91,22 @@ export default async function RendaPage({ searchParams }: { searchParams: Promis
           </section>
         </div>
 
-        <div className={editing ? "order-first lg:order-none" : ""}>
-          <IncomeForm
-            key={editing?.id ?? "new"}
-            members={couple.members}
-            defaults={
-              editing
-                ? { id: editing.id, userId: editing.userId, description: editing.description, amountCents: editing.amountCents, startMonth: editing.startMonth, endMonth: editing.endMonth }
-                : { userId: me.id, startMonth: month }
-            }
-          />
-        </div>
+        <ParamClass not param="editar" values={[""]} activeClassName="order-first lg:order-none">
+          <div id="painel" className="scroll-mt-20" />
+          {incomes.map((editing) => (
+            <ParamView key={editing.id} param="editar" values={[editing.id]}>
+              <IncomeForm
+                key={editing.id}
+                members={couple.members}
+                defaults={{ id: editing.id, userId: editing.userId, description: editing.description, amountCents: editing.amountCents, startMonth: editing.startMonth, endMonth: editing.endMonth }}
+              />
+            </ParamView>
+          ))}
+          <ParamView param="editar" values={[""]}>
+            <IncomeForm key="new"
+                members={couple.members} defaults={{ userId: me.id, startMonth: month }} />
+          </ParamView>
+        </ParamClass>
       </div>
     </>
   );

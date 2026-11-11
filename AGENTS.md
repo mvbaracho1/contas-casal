@@ -115,6 +115,13 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - `(app)/loading.tsx` mostra o esqueleto da página;
   - `components/nav-progress.tsx` mostra a barra no topo;
   - botões de envio usam `<Submit>`, que mostra "Salvando…".
+- **Filtros e seleções não recarregam a página.** Filtros, abas, "ver detalhe" e "editar" (`?filtro=`, `?ver=`, `?editar=`, `?dia=`, `?quem=`) usam `components/url-state.tsx`:
+  - o servidor manda todas as variações já renderizadas e não lê esses parâmetros;
+  - `<ParamLink>` troca o parâmetro na URL sem pedir a página de novo (`push` cria entrada no "voltar"; `scrollTo="painel"` rola até o formulário no celular);
+  - `<ParamView>` mostra a variação certa e `<ParamClass>` muda classes conforme a URL;
+  - recarregar, compartilhar o link e o `redirect` depois de salvar continuam funcionando, porque o valor vem da URL.
+  - Use `<Link>` normal só quando a troca precisa de dados novos do servidor, como mudar de mês.
+  - O carrossel de cartões da visão geral segue a mesma ideia (`components/cards-panel.tsx`).
 
 ## Banco e migrações
 

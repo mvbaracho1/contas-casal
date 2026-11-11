@@ -3,6 +3,7 @@ import { deleteSettlement } from "@/app/actions";
 import { togglePaid } from "@/app/actions-finance";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardsPanel } from "@/components/cards-panel";
+import { ParamLink, ParamView } from "@/components/url-state";
 import { CreditCard } from "@/components/credit-card";
 import { IconAlert, IconArrowRight, IconArrowUpRight, IconCheck, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
@@ -29,20 +30,14 @@ const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 export default async function VisaoGeralPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; quem?: string; dia?: string; cartao?: string }>;
+  // quem, dia e cartao são lidos no navegador (url-state / cards-panel), sem recarregar a página
+  searchParams: Promise<{ mes?: string; cartao?: string }>;
 }) {
   const { couple, me, partner, memberIds, names } = await requireCouple();
   const sp = await searchParams;
   const month = sp.mes && /^\d{4}-\d{2}$/.test(sp.mes) ? sp.mes : currentYm();
   const idx = (id: string) => memberIds.indexOf(id);
   const who = (id: string) => (id === me.id ? "Você" : names[id]);
-  const q = (extra: Record<string, string | undefined>) => {
-    const p = new URLSearchParams();
-    p.set("mes", month);
-    for (const k of ["quem", "dia", "cartao"] as const) if (sp[k] && !(k in extra)) p.set(k, sp[k]!);
-    for (const [k, v] of Object.entries(extra)) if (v) p.set(k, v);
-    return `/?${p}`;
-  };
 
   const [{ purchases, settlements, incomes, cards, bills, paidMarks }, receivables] = await Promise.all([
     loadCoupleData(couple.id),
@@ -150,7 +145,6 @@ export default async function VisaoGeralPage({
   const payTotal = sum(payables.map((p) => p.amount));
   const paidCount = payables.filter((p) => p.paid).length;
   const days = [...new Set(payables.map((p) => p.dueDay))];
-  const dayFilter = sp.dia && days.includes(Number(sp.dia)) ? Number(sp.dia) : undefined;
   const nextOpen = payables.find((p) => !p.paid);
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -176,8 +170,9 @@ export default async function VisaoGeralPage({
   const coupleHousingPct = coupleIncome ? (coupleHousing / coupleIncome) * 100 : 0;
 
   // ---------- Compras do mês ----------
-  const filterId = sp.quem && memberIds.includes(sp.quem) ? sp.quem : undefined;
-  const lines = purchaseLines.filter((l) => !filterId || l.paidById === filterId).sort((a, b) => b.amountCents - a.amountCents);
+  // filtro "de quem" (todas as variações vão prontas; a troca é no navegador)
+  const whoFilters = ["", ...memberIds];
+  const linesOf = (id: string) => purchaseLines.filter((l) => !id || l.paidById === id).sort((a, b) => b.amountCents - a.amountCents);
 
   const empty = (text: string, href: string, cta: string) => (
     <div className="mt-4 flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-200 p-5 text-center dark:border-zinc-700">
@@ -389,7 +384,7 @@ export default async function VisaoGeralPage({
           </div>
 
           {/* Acerto do mês */}
-          <section id="acerto" className={`card order-7 flex min-w-0 flex-col gap-4 md:col-span-2 ${lines.length > 2 ? "xl:min-h-[28rem]" : ""}`}>
+          <section id="acerto" className={`card order-7 flex min-w-0 flex-col gap-4 md:col-span-2 ${purchaseLines.length > 2 ? "xl:min-h-[28rem]" : ""}`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="card-title">Acerto do mês</h2>
@@ -657,33 +652,33 @@ export default async function VisaoGeralPage({
               <>
                 <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5 [scrollbar-width:none]">
                   {days.map((d) => {
-                    const active = dayFilter === d;
                     const items = payables.filter((p) => p.dueDay === d);
                     const allPaid = items.every((p) => p.paid);
                     return (
-                      <Link
+                      <ParamLink
                         key={d}
-                        href={q({ dia: active ? undefined : String(d) })}
-                        scroll={false}
-                        className={`flex min-w-14 flex-1 shrink-0 flex-col items-center rounded-xl border px-2 py-2 transition ${
-                          active ? "border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/30" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                        }`}
+                        param="dia"
+                        value={String(d)}
+                        toggle
+                        aria-label={`Contas do dia ${d}`}
+                        className="group flex min-w-14 flex-1 shrink-0 flex-col items-center rounded-xl border px-2 py-2 transition"
+                        activeClassName="border-blue-600 bg-blue-600 text-white shadow-sm shadow-blue-600/30"
+                        inactiveClassName="border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
                       >
-                        <span className={`text-sm font-bold ${allPaid && !active ? "text-zinc-400 line-through" : ""}`}>{String(d).padStart(2, "0")}</span>
+                        <span className={`text-sm font-bold ${allPaid ? "group-data-[active=false]:text-zinc-400 group-data-[active=false]:line-through" : ""}`}>{String(d).padStart(2, "0")}</span>
                         <span className="mt-1 flex gap-0.5">
                           {items.slice(0, 5).map((p, k) => (
-                            <span key={k} className={`size-1 rounded-full ${active ? "bg-white/80" : p.paid ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`} />
+                            <span key={k} className={`size-1 rounded-full group-data-[active=true]:bg-white/80 ${p.paid ? "bg-emerald-500" : "bg-zinc-300 dark:bg-zinc-600"}`} />
                           ))}
                         </span>
-                      </Link>
+                      </ParamLink>
                     );
                   })}
                 </div>
                 <ul className="mt-2 min-h-0 flex-1 divide-y divide-zinc-100 xl:overflow-y-auto dark:divide-zinc-800">
-                  {payables
-                    .filter((p) => !dayFilter || p.dueDay === dayFilter)
-                    .map((p) => (
-                      <li key={`${p.kind}-${p.refId}`} className="flex items-center gap-3 py-2.5">
+                  {payables.map((p) => (
+                    <ParamView key={`${p.kind}-${p.refId}`} param="dia" values={["", String(p.dueDay)]}>
+                      <li className="flex items-center gap-3 py-2.5">
                         <form action={togglePaid}>
                           <input type="hidden" name="kind" value={p.kind} />
                           <input type="hidden" name="refId" value={p.refId} />
@@ -708,7 +703,8 @@ export default async function VisaoGeralPage({
                         </span>
                         <span className={`tabular text-[13px] font-semibold ${p.paid ? "text-zinc-400" : ""}`}>{formatBRL(p.amount)}</span>
                       </li>
-                    ))}
+                    </ParamView>
+                  ))}
                 </ul>
               </>
             )}
@@ -772,69 +768,77 @@ export default async function VisaoGeralPage({
           <CollapsibleCard
             storageKey="cc:compras-do-mes"
             label="compras do mês"
-            className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${lines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}
+            className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${purchaseLines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}
             collapsedClassName="card order-8 flex min-w-0 flex-col self-start md:col-span-2 xl:col-span-1"
             aside={<Illustration emoji="🧾" />}
             header={
               <>
                 <h2 className="card-title">Compras do mês <span className="muted font-normal">· {purchaseLines.length}</span></h2>
-                <div className="mt-2"><Money cents={sum(lines.map((l) => l.amountCents))} size="lg" /></div>
-                <p className="muted mt-0.5 text-xs">{filterId ? `pagas por ${who(filterId).toLowerCase()}` : "parcelas das compras do casal"}</p>
-                {(() => {
-                  const fl = friendLines.filter((l) => !filterId || l.paidById === filterId);
-                  return fl.length > 0 ? (
-                    <a href="#amigos" className="mt-1 inline-flex text-[11px] font-medium text-blue-600 dark:text-blue-400">
-                      + {formatBRL(sum(fl.map((l) => l.amountCents)))} de amigos, à parte →
-                    </a>
-                  ) : null;
-                })()}
+                {whoFilters.map((id) => {
+                  const fl = friendLines.filter((l) => !id || l.paidById === id);
+                  return (
+                    <ParamView key={id || "todas"} param="quem" values={[id]}>
+                      <div className="mt-2"><Money cents={sum(linesOf(id).map((l) => l.amountCents))} size="lg" /></div>
+                      <p className="muted mt-0.5 text-xs">{id ? `pagas por ${who(id).toLowerCase()}` : "parcelas das compras do casal"}</p>
+                      {fl.length > 0 && (
+                        <a href="#amigos" className="mt-1 inline-flex text-[11px] font-medium text-blue-600 dark:text-blue-400">
+                          + {formatBRL(sum(fl.map((l) => l.amountCents)))} de amigos, à parte →
+                        </a>
+                      )}
+                    </ParamView>
+                  );
+                })}
               </>
             }
           >
             <div className="mt-4 grid grid-cols-3 gap-2">
-              {[undefined, ...memberIds].map((id) => {
-                const active = filterId === id;
-                return (
-                  <Link
-                    key={id ?? "todas"}
-                    href={q({ quem: id })}
-                    scroll={false}
-                    className={`truncate rounded-xl border px-2 py-2 text-center text-xs font-semibold transition ${
-                      active ? "border-blue-600 bg-blue-600 text-white" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
-                    }`}
-                  >
-                    {id ? who(id) : "Todas"}
-                  </Link>
-                );
-              })}
+              {whoFilters.map((id) => (
+                <ParamLink
+                  key={id || "todas"}
+                  param="quem"
+                  value={id}
+                  className="truncate rounded-xl border px-2 py-2 text-center text-xs font-semibold transition"
+                  activeClassName="border-blue-600 bg-blue-600 text-white"
+                  inactiveClassName="border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+                >
+                  {id ? who(id) : "Todas"}
+                </ParamLink>
+              ))}
             </div>
-            {lines.length === 0 ? (
-              empty("Nenhuma parcela aqui.", "/compras/nova", "Adicionar compra")
-            ) : (
-              <ul className="mt-3 min-h-0 flex-1 divide-y divide-zinc-100 xl:overflow-y-auto dark:divide-zinc-800">
-                {lines.map((l) => {
-                  const other = memberIds.find((m) => m !== l.paidById)!;
-                  return (
-                    <li key={l.sourceId}>
-                      <Link href={`/compras/${l.sourceId}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
-                        <Avatar name={names[l.paidById]} index={idx(l.paidById)} size="sm" />
-                        <span className="min-w-0 flex-1">
-                          <span className="flex items-center gap-1.5">
-                            <span className="truncate text-[13px] font-medium">{l.description}</span>
-                            {l.of > 1 && <span className="pill shrink-0 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{l.number}/{l.of}</span>}
-                            {l.recurring && <span className="pill shrink-0 bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">🔁 mensal</span>}
-                          </span>
-                          <span className="muted block truncate text-[11px]">
-{l.otherShareCents > 0 ? `${who(other)} deve ${formatBRL(l.otherShareCents)}` : `Só de ${who(l.paidById).toLowerCase()}`}
-                          </span>
-                        </span>
-                        <span className="tabular text-[13px] font-semibold">{formatBRL(l.amountCents)}</span>
-                      </Link>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
+            {whoFilters.map((id) => {
+              const lines = linesOf(id);
+              return (
+                <ParamView key={id || "todas"} param="quem" values={[id]}>
+                  {lines.length === 0 ? (
+                    empty("Nenhuma parcela aqui.", "/compras/nova", "Adicionar compra")
+                  ) : (
+                    <ul className="mt-3 min-h-0 flex-1 divide-y divide-zinc-100 xl:overflow-y-auto dark:divide-zinc-800">
+                      {lines.map((l) => {
+                        const other = memberIds.find((m) => m !== l.paidById)!;
+                        return (
+                          <li key={l.sourceId}>
+                            <Link href={`/compras/${l.sourceId}`} className="-mx-2 flex items-center gap-3 rounded-lg px-2 py-2.5 transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60">
+                              <Avatar name={names[l.paidById]} index={idx(l.paidById)} size="sm" />
+                              <span className="min-w-0 flex-1">
+                                <span className="flex items-center gap-1.5">
+                                  <span className="truncate text-[13px] font-medium">{l.description}</span>
+                                  {l.of > 1 && <span className="pill shrink-0 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{l.number}/{l.of}</span>}
+                                  {l.recurring && <span className="pill shrink-0 bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">🔁 mensal</span>}
+                                </span>
+                                <span className="muted block truncate text-[11px]">
+                                  {l.otherShareCents > 0 ? `${who(other)} deve ${formatBRL(l.otherShareCents)}` : `Só de ${who(l.paidById).toLowerCase()}`}
+                                </span>
+                              </span>
+                              <span className="tabular text-[13px] font-semibold">{formatBRL(l.amountCents)}</span>
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </ParamView>
+              );
+            })}
           </CollapsibleCard>
         </div>
       </div>

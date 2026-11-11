@@ -1,10 +1,10 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState, useState } from "react";
 import { saveBill, saveCard, saveIncome } from "@/app/actions-finance";
 import { BILL_CATEGORIES, CARD_COLORS, CARD_STYLES } from "@/lib/finance";
 import { Message, Submit } from "./form-bits";
+import { ParamLink } from "./url-state";
 
 type Member = { id: string; name: string };
 
@@ -15,12 +15,12 @@ const chip = (active: boolean) =>
       : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
   }`;
 
-function FormShell({ title, editing, cancelHref, children }: { title: [string, string]; editing: boolean; cancelHref: string; children: React.ReactNode }) {
+function FormShell({ title, editing, children }: { title: [string, string]; editing: boolean; children: React.ReactNode }) {
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="card-title">{editing ? title[1] : title[0]}</h2>
-        {editing && <Link href={cancelHref} className="text-xs font-medium text-blue-600">Cancelar</Link>}
+        {editing && <ParamLink param="editar" value="" className="text-xs font-medium text-blue-600">Cancelar</ParamLink>}
       </div>
       {children}
     </div>
@@ -72,7 +72,7 @@ export function IncomeForm({ members, defaults }: { members: Member[]; defaults:
   const [state, action] = useActionState(saveIncome, undefined);
   const [userId, setUserId] = useState(defaults.userId);
   return (
-    <FormShell title={["Nova renda", "Editar renda"]} editing={!!defaults.id} cancelHref="/renda">
+    <FormShell title={["Nova renda", "Editar renda"]} editing={!!defaults.id}>
       <form action={action} className="space-y-4" key={defaults.id ?? "new"}>
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
         <fieldset>
@@ -114,7 +114,7 @@ export function CardForm({ members, defaults }: { members: Member[]; defaults: C
   const [ownerId, setOwnerId] = useState(defaults.ownerId);
   const [color, setColor] = useState(defaults.color ?? "black");
   return (
-    <FormShell title={["Novo cartão", "Editar cartão"]} editing={!!defaults.id} cancelHref="/cartoes">
+    <FormShell title={["Novo cartão", "Editar cartão"]} editing={!!defaults.id}>
       <form action={action} className="space-y-4" key={defaults.id ?? "new"}>
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
         <div>
@@ -180,7 +180,7 @@ export function BillForm({ members, defaults }: { members: Member[]; defaults: B
   const mode = split === "renda" ? "renda" : split === "50" ? "split" : split === "100" ? "payer" : split === "0" ? "other" : "custom";
 
   return (
-    <FormShell title={["Nova conta fixa", "Editar conta fixa"]} editing={!!defaults.id} cancelHref="/contas">
+    <FormShell title={["Nova conta fixa", "Editar conta fixa"]} editing={!!defaults.id}>
       <form action={action} className="space-y-4" key={defaults.id ?? "new"}>
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
         <div className="grid grid-cols-2 gap-3">

@@ -9,6 +9,7 @@ import { prisma } from "@/lib/db";
 import { cardInvoice, cardOutstanding } from "@/lib/finance";
 import { addMonths, currentYm, formatBRL } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
 function monthShort(ym: string) {
   const [y, m] = ym.split("-").map(Number);
@@ -16,16 +17,15 @@ function monthShort(ym: string) {
   return `${n.charAt(0).toUpperCase()}${n.slice(1)}/${String(y).slice(2)}`;
 }
 
-export default async function CartoesPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
+// ?editar=ID troca no navegador (url-state): os formulários de edição já vêm prontos do servidor.
+export default async function CartoesPage() {
   const { couple, me, names } = await requireCouple();
-  const { editar } = await searchParams;
   const [cards, purchases, marks] = await Promise.all([
     prisma.card.findMany({ where: { coupleId: couple.id }, orderBy: { createdAt: "asc" } }),
     prisma.purchase.findMany({ where: { coupleId: couple.id, cardId: { not: null } } }),
     prisma.paidMark.findMany({ where: { coupleId: couple.id, cardId: { not: null } } }),
   ]);
   const month = currentYm();
-  const editing = cards.find((c) => c.id === editar);
 
   return (
     <>
@@ -73,7 +73,7 @@ export default async function CartoesPage({ searchParams }: { searchParams: Prom
                       </div>
                       <div className="pointer-events-auto flex shrink-0 gap-1">
                         <Link href={`/compras/importar?cartao=${c.id}`} className="btn-outline">📄 Importar<span className="hidden sm:inline"> fatura</span></Link>
-                        <Link href={`/cartoes?editar=${c.id}`} className="btn-outline">Editar</Link>
+                        <ParamLink param="editar" value={c.id} push scrollTo="painel" className="btn-outline">Editar</ParamLink>
                         <form action={deleteCard}>
                           <input type="hidden" name="id" value={c.id} />
                           <ConfirmButton
@@ -115,17 +115,22 @@ export default async function CartoesPage({ searchParams }: { searchParams: Prom
           })}
         </div>
 
-        <div className={editing ? "order-first lg:order-none" : ""}>
-          <CardForm
-            key={editing?.id ?? "new"}
-            members={couple.members}
-            defaults={
-              editing
-                ? { id: editing.id, name: editing.name, ownerId: editing.ownerId, closingDay: editing.closingDay, dueDay: editing.dueDay, limitCents: editing.limitCents, color: editing.color }
-                : { ownerId: me.id }
-            }
-          />
-        </div>
+        <ParamClass not param="editar" values={[""]} activeClassName="order-first lg:order-none">
+          <div id="painel" className="scroll-mt-20" />
+          {cards.map((editing) => (
+            <ParamView key={editing.id} param="editar" values={[editing.id]}>
+              <CardForm
+                key={editing.id}
+                members={couple.members}
+                defaults={{ id: editing.id, name: editing.name, ownerId: editing.ownerId, closingDay: editing.closingDay, dueDay: editing.dueDay, limitCents: editing.limitCents, color: editing.color }}
+              />
+            </ParamView>
+          ))}
+          <ParamView param="editar" values={[""]}>
+            <CardForm key="new"
+                members={couple.members} defaults={{ ownerId: me.id }} />
+          </ParamView>
+        </ParamClass>
       </div>
     </>
   );

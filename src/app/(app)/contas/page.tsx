@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { deleteBill } from "@/app/actions-finance";
 import { BillForm } from "@/components/finance-forms";
 import { IconTrash } from "@/components/icons";
@@ -9,15 +8,15 @@ import { prisma } from "@/lib/db";
 import { BILL_CATEGORIES, BILL_EMOJI, splitLabel } from "@/lib/finance";
 import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
+import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
-export default async function ContasPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
+// ?editar=ID troca no navegador (url-state): os formulários de edição já vêm prontos do servidor.
+export default async function ContasPage() {
   const { couple, me, memberIds, names } = await requireCouple();
-  const { editar } = await searchParams;
   const bills = await prisma.bill.findMany({ where: { coupleId: couple.id }, orderBy: [{ dueDay: "asc" }, { name: "asc" }] });
   const month = currentYm();
   const active = bills.filter((b) => activeIn(b, month));
   const total = active.reduce((a, b) => a + b.amountCents, 0);
-  const editing = bills.find((b) => b.id === editar);
 
   const groups = BILL_CATEGORIES.map((cat) => ({ cat, items: bills.filter((b) => b.category === cat) })).filter((g) => g.items.length);
   const other = (id: string) => memberIds.find((m) => m !== id)!;
@@ -51,13 +50,13 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                   return (
                     <li key={b.id} className={`flex items-center gap-3 py-3 ${on ? "" : "opacity-60"}`}>
                       <Avatar name={names[b.paidById]} index={memberIds.indexOf(b.paidById)} size="sm" />
-                      <Link href={`/contas?editar=${b.id}`} className="min-w-0 flex-1">
+                      <ParamLink param="editar" value={b.id} push scrollTo="painel" className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{b.name}</p>
                         <p className="muted truncate text-xs">
                           Dia {b.dueDay} · paga {b.paidById === me.id ? "você" : names[b.paidById]} · {splitLabel(b.payerSharePct, names[b.paidById], names[other(b.paidById)])}
                           {!on && " · fora do período"}
                         </p>
-                      </Link>
+                      </ParamLink>
                       <span className="tabular text-sm font-semibold">{formatBRL(b.amountCents)}</span>
                       <form action={deleteBill}>
                         <input type="hidden" name="id" value={b.id} />
@@ -76,20 +75,25 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
           ))}
         </div>
 
-        <div className={editing ? "order-first lg:order-none" : ""}>
-          <BillForm
-            key={editing?.id ?? "new"}
-            members={couple.members}
-            defaults={
-              editing
-                ? {
-                    id: editing.id, name: editing.name, category: editing.category, amountCents: editing.amountCents, dueDay: editing.dueDay,
-                    paidById: editing.paidById, payerSharePct: editing.payerSharePct, startMonth: editing.startMonth, endMonth: editing.endMonth,
-                  }
-                : { paidById: me.id, startMonth: month }
-            }
-          />
-        </div>
+        <ParamClass not param="editar" values={[""]} activeClassName="order-first lg:order-none">
+          <div id="painel" className="scroll-mt-20" />
+          {bills.map((editing) => (
+            <ParamView key={editing.id} param="editar" values={[editing.id]}>
+              <BillForm
+                key={editing.id}
+                members={couple.members}
+                defaults={{
+                  id: editing.id, name: editing.name, category: editing.category, amountCents: editing.amountCents, dueDay: editing.dueDay,
+                  paidById: editing.paidById, payerSharePct: editing.payerSharePct, startMonth: editing.startMonth, endMonth: editing.endMonth,
+                }}
+              />
+            </ParamView>
+          ))}
+          <ParamView param="editar" values={[""]}>
+            <BillForm key="new"
+                members={couple.members} defaults={{ paidById: me.id, startMonth: month }} />
+          </ParamView>
+        </ParamClass>
       </div>
     </>
   );
