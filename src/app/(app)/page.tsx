@@ -2,6 +2,7 @@ import Link from "next/link";
 import { deleteSettlement } from "@/app/actions";
 import { togglePaid } from "@/app/actions-finance";
 import { CollapsibleCard } from "@/components/collapsible-card";
+import { CardCarousel } from "@/components/card-carousel";
 import { CreditCard } from "@/components/credit-card";
 import { IconAlert, IconArrowRight, IconArrowUpRight, IconCheck, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
@@ -359,19 +360,16 @@ export default async function VisaoGeralPage({
               ) : (
                 <>
                   <Link href={selCard ? `/cartoes/${selCard.id}?mes=${month}` : "/cartoes"} className="btn-outline mt-3 self-start">Ver fatura</Link>
-                  <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-1 sm:-mx-5 sm:px-5 [scrollbar-width:none]">
-                    {cardInvoices.map((ci) => {
-                      const sel = ci.card.id === selCard?.id;
+                  <CardCarousel
+                    selectedId={selCard!.id}
+                    slides={cardInvoices.map((ci) => {
                       const paid = paidMarks.some((m) => m.cardId === ci.card.id && m.month === month);
-                      return (
-                        <Link
-                          key={ci.card.id}
-                          // 1º clique seleciona; no cartão já selecionado, abre os detalhes
-                          href={sel ? `/cartoes/${ci.card.id}?mes=${month}` : q({ cartao: ci.card.id })}
-                          scroll={!sel ? false : undefined}
-                          aria-label={sel ? `Ver detalhes do ${ci.card.name}` : `Selecionar ${ci.card.name}`}
-                          className={`w-[78%] max-w-72 shrink-0 snap-start rounded-2xl transition ${sel ? "ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-900" : "opacity-75 hover:opacity-100"}`}
-                        >
+                      return {
+                        id: ci.card.id,
+                        label: ci.card.name,
+                        selectHref: q({ cartao: ci.card.id }),
+                        detailHref: `/cartoes/${ci.card.id}?mes=${month}`,
+                        node: (
                           <CreditCard
                             name={ci.card.name}
                             owner={who(ci.card.ownerId)}
@@ -380,10 +378,10 @@ export default async function VisaoGeralPage({
                             limitFreeCents={ci.card.limitCents !== null ? ci.card.limitCents - cardOutstanding(purchases, ci.card.id, month) : null}
                             status={ci.count === 0 ? "Sem fatura" : paid ? "Paga" : "Aberta"}
                           />
-                        </Link>
-                      );
+                        ),
+                      };
                     })}
-                  </div>
+                  />
 
                   <p className="mt-5 text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">Próximas faturas</p>
                   <div className="relative mt-2 grid flex-1 grid-cols-3 gap-2">
