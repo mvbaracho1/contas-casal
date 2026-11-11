@@ -7,6 +7,7 @@ import { Avatar, fmtPct, Illustration, MEMBER_COLORS, Money, pct } from "@/compo
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { activeIn, currentYm, formatBRL, formatYm, incomeByUser } from "@/lib/ledger";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export default async function RendaPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
   const { couple, me, memberIds, names } = await requireCouple();
@@ -76,7 +77,12 @@ export default async function RendaPage({ searchParams }: { searchParams: Promis
                       <span className="tabular text-sm font-semibold">{formatBRL(i.amountCents)}</span>
                       <form action={deleteIncome}>
                         <input type="hidden" name="id" value={i.id} />
-                        <button className="btn-icon size-8 hover:text-red-600" aria-label="Excluir renda"><IconTrash width={14} height={14} /></button>
+                        <ConfirmButton
+                          className="btn-icon size-8 hover:text-red-600" aria-label="Excluir renda"
+                          title="Excluir renda?" message={<><b>{i.description}</b> ({formatBRL(i.amountCents)}) será apagada.</>}
+                        >
+                          <IconTrash width={14} height={14} />
+                        </ConfirmButton>
                       </form>
                     </li>
                   );

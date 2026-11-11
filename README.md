@@ -30,6 +30,7 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
   - Detecta compras já importadas antes.
   - Ignora pagamentos, estornos e a seção de parcelas de faturas futuras.
 - **Cartões:** titular, dia de fechamento e vencimento, limite e cor. A fatura do mês é a soma das parcelas daquele cartão.
+  - Clicando no cartão, abre a aba dele com a fatura do mês, as compras (assinaturas, parceladas e à vista), um gráfico de 12 faturas e insights: do que é feita a fatura, de quem é cada parte, parcelamentos em aberto e quando a fatura vai diminuir, custo anual das assinaturas e maiores compras.
 - **Contas fixas:** aluguel, luz, assinaturas etc., com vencimento e divisão. Também podem ser divididas proporcionalmente à renda.
 - **Nossa renda:** salário e outras rendas de cada um, com mês de início e de fim.
 - **A receber**
@@ -43,6 +44,7 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
   - Aportes e retiradas registrando quem guardou. O app mostra o progresso, quanto falta e **quanto guardar por mês** para cumprir o prazo.
   - Na reserva de emergência, o app sugere um valor de 6 meses das contas fixas do casal.
   - É só controle: não entra no saldo nem no acerto.
+- **Limpar dados** (em Mais): apaga compras, cartões, contas fixas, renda, acertos, valores a receber e metas para recomeçar do zero. É possível escolher o que apagar e é preciso digitar APAGAR para confirmar. As contas e o casal continuam.
 - **Visão geral do mês**
   - Saldo previsto, contas a pagar, faturas dos cartões, moradia e compras do mês.
   - **Acerto:** quem envia quanto para quem. Depois do Pix, registre a transferência e o mês fica zerado. Pendências de meses anteriores aparecem no acerto.

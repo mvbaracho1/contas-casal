@@ -8,6 +8,7 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { chargeMessage, summarizeReceivable, whatsappLink, type InstallmentStatus, type ReceivableSummary } from "@/lib/receivables";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export const metadata = { title: "A receber · Contas do Casal" };
 
@@ -262,7 +263,12 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
                 <span className="tabular text-xs font-semibold text-emerald-600 dark:text-emerald-400">+{formatBRL(p.amountCents)}</span>
                 <form action={deleteReceivablePayment}>
                   <input type="hidden" name="id" value={p.id} />
-                  <button className="btn-icon size-7 hover:text-red-600" aria-label="Excluir recebimento"><IconTrash width={13} height={13} /></button>
+                  <ConfirmButton
+                    className="btn-icon size-7 hover:text-red-600" aria-label="Excluir recebimento"
+                    title="Excluir recebimento?" message={<>O recebimento de <b>{formatBRL(p.amountCents)}</b> volta a ficar em aberto.</>}
+                  >
+                    <IconTrash width={13} height={13} />
+                  </ConfirmButton>
                 </form>
               </li>
             ))}
@@ -274,7 +280,12 @@ function Detail({ item: { r, s }, names, filtro }: { item: Item; names: Record<s
         <Link href={`/receber?editar=${r.id}`} className="btn-outline py-2 text-sm">Editar</Link>
         <form action={deleteReceivable}>
           <input type="hidden" name="id" value={r.id} />
-          <button className="btn-danger"><IconTrash /> Excluir</button>
+          <ConfirmButton
+            className="btn-danger" title="Excluir valor a receber?"
+            message={<><b>{r.description}</b> ({r.personName}) e os recebimentos registrados serão apagados.{r.purchase && " A compra no cartão continua."}</>}
+          >
+            <IconTrash /> Excluir
+          </ConfirmButton>
         </form>
       </div>
     </section>

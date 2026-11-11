@@ -8,6 +8,7 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { cardInvoice, cardOutstanding } from "@/lib/finance";
 import { addMonths, currentYm, formatBRL } from "@/lib/ledger";
+import { ConfirmButton } from "@/components/confirm-button";
 
 function monthShort(ym: string) {
   const [y, m] = ym.split("-").map(Number);
@@ -44,16 +45,20 @@ export default async function CartoesPage({ searchParams }: { searchParams: Prom
             const next = [0, 1, 2, 3].map((n) => ({ ym: addMonths(month, n), ...cardInvoice(purchases, c.id, addMonths(month, n)) }));
             const max = Math.max(...next.map((x) => x.totalCents), 1);
             return (
-              <section key={c.id} className="card">
-                <div className="grid gap-5 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
-                  <CreditCard
-                    name={c.name}
-                    owner={c.ownerId === me.id ? "Você" : names[c.ownerId]}
-                    color={c.color}
-                    dueLabel={`dia ${String(c.dueDay).padStart(2, "0")}`}
-                    limitFreeCents={c.limitCents !== null ? c.limitCents - used : null}
-                    status={inv.count === 0 ? "Sem fatura" : paid ? "Paga" : "Aberta"}
-                  />
+              <section key={c.id} className="card group relative transition hover:border-blue-300 hover:shadow-md dark:hover:border-blue-800">
+                {/* O card todo abre os detalhes; botões e links internos ficam por cima (relative z-10). */}
+                <Link href={`/cartoes/${c.id}`} aria-label={`Ver detalhes do ${c.name}`} className="absolute inset-0 z-0 rounded-2xl" />
+                <div className="pointer-events-none relative grid gap-5 sm:grid-cols-[minmax(0,260px)_minmax(0,1fr)]">
+                  <div className="rounded-2xl transition group-hover:-translate-y-0.5">
+                    <CreditCard
+                      name={c.name}
+                      owner={c.ownerId === me.id ? "Você" : names[c.ownerId]}
+                      color={c.color}
+                      dueLabel={`dia ${String(c.dueDay).padStart(2, "0")}`}
+                      limitFreeCents={c.limitCents !== null ? c.limitCents - used : null}
+                      status={inv.count === 0 ? "Sem fatura" : paid ? "Paga" : "Aberta"}
+                    />
+                  </div>
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-2">
                       <div>
@@ -62,13 +67,21 @@ export default async function CartoesPage({ searchParams }: { searchParams: Prom
                         <p className="muted text-xs">
                           {inv.count} parcela{inv.count === 1 ? "" : "s"} · fecha dia {c.closingDay} · vence dia {c.dueDay}
                         </p>
+                        <Link href={`/cartoes/${c.id}`} className="pointer-events-auto mt-1 inline-flex text-xs font-semibold text-blue-600 dark:text-blue-400">
+                          Ver compras e detalhes →
+                        </Link>
                       </div>
-                      <div className="flex shrink-0 gap-1">
+                      <div className="pointer-events-auto flex shrink-0 gap-1">
                         <Link href={`/compras/importar?cartao=${c.id}`} className="btn-outline">📄 Importar<span className="hidden sm:inline"> fatura</span></Link>
                         <Link href={`/cartoes?editar=${c.id}`} className="btn-outline">Editar</Link>
                         <form action={deleteCard}>
                           <input type="hidden" name="id" value={c.id} />
-                          <button className="btn-icon size-8 hover:text-red-600" aria-label="Excluir cartão"><IconTrash width={14} height={14} /></button>
+                          <ConfirmButton
+                            className="btn-icon size-8 hover:text-red-600" aria-label="Excluir cartão"
+                            title="Excluir cartão?" message={<>O cartão <b>{c.name}</b> será apagado. As compras continuam, mas ficam sem cartão.</>}
+                          >
+                            <IconTrash width={14} height={14} />
+                          </ConfirmButton>
                         </form>
                       </div>
                     </div>

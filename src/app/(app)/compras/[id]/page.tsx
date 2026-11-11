@@ -7,6 +7,7 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { cardOptions, incomePercents, receivablePeople } from "@/lib/finance-data";
 import { currentYm } from "@/lib/ledger";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export default async function EditarCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -28,7 +29,12 @@ export default async function EditarCompraPage({ params }: { params: Promise<{ i
         actions={
           <form action={deletePurchase}>
             <input type="hidden" name="id" value={p.id} />
-            <button className="btn-danger"><IconTrash /> <span className="hidden sm:inline">Excluir</span></button>
+            <ConfirmButton
+              className="btn-danger" aria-label="Excluir compra" title="Excluir compra?"
+              message={<><b>{p.description}</b>{p.installments > 1 ? ` e as ${p.installments} parcelas serão apagadas` : " será apagada"}{p.receivable ? `. O valor a receber de ${p.receivable.personName} continua em “A receber”` : ""}.</>}
+            >
+              <IconTrash /> <span className="hidden sm:inline">Excluir</span>
+            </ConfirmButton>
           </form>
         }
       />

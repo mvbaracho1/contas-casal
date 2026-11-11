@@ -36,6 +36,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 |---|---|
 | `src/lib/ledger.ts` | **Lógica pura** de dinheiro: parcelas, divisões, renda e acerto. Sem banco e sem React. Toda regra de cálculo vai aqui, com teste em `ledger.test.ts` |
 | `src/lib/statement.ts` | **Leitor puro** de faturas (texto de PDF, OFX, CSV). Testes em `statement.test.ts` |
+| `src/lib/card-insights.ts` | **Lógica pura** da aba do cartão: composição da fatura, de quem é cada parte, linha do tempo, parcelamentos em aberto, próximo alívio e assinaturas. Testes em `card-insights.test.ts` |
 | `src/lib/goals.ts` | **Lógica pura** das metas: progresso, quanto guardar por mês até o prazo, contribuição de cada um. Testes em `goals.test.ts` |
 | `src/lib/receivables.ts` | **Lógica pura** dos valores a receber: parcelas, distribuição dos pagamentos, status e mensagem de cobrança. Testes em `receivables.test.ts` |
 | `src/lib/finance.ts` | Funções puras de apresentação e de cartão (`splitLabel`, `cardInvoice`, cores) |
@@ -93,6 +94,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 - Em caso de sucesso, chame `revalidatePath("/", "layout")` (ou a rota afetada) e depois `redirect(...)` ou `return { ok }`.
 - No cliente, use `useActionState(acao, undefined)` com `<Submit>` e `<Message state={state} />` de `components/form-bits.tsx`.
 - **O React 19 limpa o formulário depois de cada envio.** Campos que o usuário não deve perder quando dá erro (e-mail, senha, nome) precisam ser **controlados** com `useState`. Campos de arquivo também: guarde o `File` no estado.
+- **Exclusões pedem confirmação:** todo botão de excluir usa `<ConfirmButton>` (`components/confirm-button.tsx`) dentro do `<form action={delete…}>`. Ele abre uma janelinha dizendo o que será apagado; para exclusões em massa, use `requireText="APAGAR"`.
 - **Toast de sucesso:** toda action que grava algo chama `await flash("Mensagem curta")` (`lib/flash.ts`) antes do `redirect`/`revalidatePath("/", "layout")`. O `<Toaster />` (no layout raiz) mostra o aviso e apaga o cookie. Erros continuam inline no formulário com `{ error }`. Não repita o sucesso inline: devolva `{}` em vez de `{ ok }`. A exceção é a tela de "esqueci a senha", que troca de conteúdo.
 - Para enviar listas complexas, como na importação, mande um campo oculto `payload` com JSON e valide com zod no servidor.
 

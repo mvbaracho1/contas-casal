@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBag, IconCalendar, IconCard, IconGrid, IconMenu, IconPlus, IconReceive, IconTarget, IconUsers, IconWallet } from "./icons";
+import { IconBag, IconCalendar, IconCard, IconGrid, IconMenu, IconPlus, IconReceive, IconTarget, IconTrash, IconUsers, IconWallet } from "./icons";
 
 const MENU = [
   { href: "/", label: "Visão geral", icon: IconGrid },
@@ -15,11 +15,13 @@ const MENU = [
 const AJUSTES = [
   { href: "/renda", label: "Nossa renda", icon: IconWallet },
   { href: "/casal", label: "Casal", icon: IconUsers },
+  { href: "/mais/limpar", label: "Limpar dados", icon: IconTrash },
 ];
 
 function isActive(path: string, href: string) {
   if (href === "/") return path === "/";
   if (href === "/compras") return path === "/compras" || (path.startsWith("/compras/") && path !== "/compras/nova");
+  if (href === "/cartoes") return path === "/cartoes" || path.startsWith("/cartoes/");
   return path === href;
 }
 

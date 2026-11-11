@@ -14,6 +14,7 @@ import { loadCoupleData } from "@/lib/finance-data";
 import { addMonths, currentYm, formatBRL, incomeByUser, summarizeMonth, type InstallmentLine } from "@/lib/ledger";
 import { prisma } from "@/lib/db";
 import { summarizeReceivable } from "@/lib/receivables";
+import { ConfirmButton } from "@/components/confirm-button";
 
 function monthParts(ym: string) {
   const [y, m] = ym.split("-").map(Number);
@@ -338,7 +339,7 @@ export default async function VisaoGeralPage({
                 empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes", "Adicionar cartão")
               ) : (
                 <>
-                  <Link href="/cartoes" className="btn-outline mt-3 self-start">Ver faturas</Link>
+                  <Link href={selCard ? `/cartoes/${selCard.id}?mes=${month}` : "/cartoes"} className="btn-outline mt-3 self-start">Ver fatura</Link>
                   <div className="-mx-4 mt-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 py-1 sm:-mx-5 sm:px-5 [scrollbar-width:none]">
                     {cardInvoices.map((ci) => {
                       const sel = ci.card.id === selCard?.id;
@@ -346,8 +347,10 @@ export default async function VisaoGeralPage({
                       return (
                         <Link
                           key={ci.card.id}
-                          href={q({ cartao: ci.card.id })}
-                          scroll={false}
+                          // 1º clique seleciona; no cartão já selecionado, abre os detalhes
+                          href={sel ? `/cartoes/${ci.card.id}?mes=${month}` : q({ cartao: ci.card.id })}
+                          scroll={!sel ? false : undefined}
+                          aria-label={sel ? `Ver detalhes do ${ci.card.name}` : `Selecionar ${ci.card.name}`}
                           className={`w-[78%] max-w-72 shrink-0 snap-start rounded-2xl transition ${sel ? "ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-zinc-900" : "opacity-75 hover:opacity-100"}`}
                         >
                           <CreditCard
@@ -445,7 +448,12 @@ export default async function VisaoGeralPage({
                     <span className="tabular font-semibold">{formatBRL(t.amountCents)}</span>
                     <form action={deleteSettlement}>
                       <input type="hidden" name="id" value={t.id} />
-                      <button className="btn-icon size-8 hover:text-red-600" aria-label="Remover transferência"><IconTrash width={14} height={14} /></button>
+                      <ConfirmButton
+                        className="btn-icon size-8 hover:text-red-600" aria-label="Remover transferência"
+                        title="Excluir transferência?" message={<>A transferência de <b>{formatBRL(t.amountCents)}</b> sai do acerto do mês.</>}
+                      >
+                        <IconTrash width={14} height={14} />
+                      </ConfirmButton>
                     </form>
                   </li>
                 ))}

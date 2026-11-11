@@ -8,6 +8,7 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { emergencyFundSuggestion, summarizeGoal, type GoalSummary } from "@/lib/goals";
 import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export const metadata = { title: "Metas · Contas do Casal" };
 
@@ -238,7 +239,13 @@ function Detail({ item: { g, s }, memberIds, names, meId, members }: {
                 </span>
                 <form action={deleteGoalEntry}>
                   <input type="hidden" name="id" value={e.id} />
-                  <button className="btn-icon size-7 hover:text-red-600" aria-label="Excluir lançamento"><IconTrash width={13} height={13} /></button>
+                  <ConfirmButton
+                    className="btn-icon size-7 hover:text-red-600" aria-label="Excluir lançamento"
+                    title={e.amountCents >= 0 ? "Excluir aporte?" : "Excluir retirada?"}
+                    message={<>O lançamento de <b>{formatBRL(Math.abs(e.amountCents))}</b> será apagado da meta.</>}
+                  >
+                    <IconTrash width={13} height={13} />
+                  </ConfirmButton>
                 </form>
               </li>
             ))}
@@ -250,7 +257,9 @@ function Detail({ item: { g, s }, memberIds, names, meId, members }: {
         <Link href={`/metas?editar=${g.id}`} className="btn-outline py-2 text-sm">Editar meta</Link>
         <form action={deleteGoal}>
           <input type="hidden" name="id" value={g.id} />
-          <button className="btn-danger"><IconTrash /> Excluir</button>
+          <ConfirmButton className="btn-danger" title="Excluir meta?" message={<>A meta <b>{g.emoji} {g.name}</b> e todos os aportes serão apagados.</>}>
+            <IconTrash /> Excluir
+          </ConfirmButton>
         </form>
       </div>
     </section>

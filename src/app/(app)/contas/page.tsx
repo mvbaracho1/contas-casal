@@ -8,6 +8,7 @@ import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BILL_CATEGORIES, BILL_EMOJI, splitLabel } from "@/lib/finance";
 import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
+import { ConfirmButton } from "@/components/confirm-button";
 
 export default async function ContasPage({ searchParams }: { searchParams: Promise<{ editar?: string }> }) {
   const { couple, me, memberIds, names } = await requireCouple();
@@ -60,7 +61,12 @@ export default async function ContasPage({ searchParams }: { searchParams: Promi
                       <span className="tabular text-sm font-semibold">{formatBRL(b.amountCents)}</span>
                       <form action={deleteBill}>
                         <input type="hidden" name="id" value={b.id} />
-                        <button className="btn-icon size-8 hover:text-red-600" aria-label="Excluir conta"><IconTrash width={14} height={14} /></button>
+                        <ConfirmButton
+                          className="btn-icon size-8 hover:text-red-600" aria-label="Excluir conta"
+                          title="Excluir conta fixa?" message={<><b>{b.name}</b> ({formatBRL(b.amountCents)}/mês) sai de todos os meses.</>}
+                        >
+                          <IconTrash width={14} height={14} />
+                        </ConfirmButton>
                       </form>
                     </li>
                   );
