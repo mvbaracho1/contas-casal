@@ -81,6 +81,18 @@ export default async function VisaoGeralPage({
   const s = summarizeMonth(purchases, settlements, month, memberIds, { bills, incomes });
   const monthSettlements = settlements.filter((x) => x.month === month);
   const pending = s.monthPending;
+  // O que entra no acerto: linhas em que um deve uma parte ao outro (compras de amigos ficam fora)
+  const settleLines = s.lines
+    .filter((l) => l.otherShareCents > 0 && !(l.kind === "purchase" && friendByPurchase.has(l.sourceId)))
+    .map((l) => ({ ...l, net: l.paidById === me.id ? l.otherShareCents : -l.otherShareCents }))
+    .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
+  const settleGroups = [
+    { title: "Compras", list: settleLines.filter((l) => l.kind === "purchase") },
+    { title: "Contas fixas", list: settleLines.filter((l) => l.kind === "bill") },
+  ].filter((g) => g.list.length > 0);
+  const settleGross = sum(settleLines.map((l) => l.net));
+  const settledNet = sum(monthSettlements.map((t) => (t.fromId === partner.id ? t.amountCents : -t.amountCents)));
+  const signed = (net: number) => (net > 0 ? `${partner.name} te deve` : net < 0 ? `você deve a ${partner.name}` : "ninguém deve");
   const hasOlderPending =
     s.cumulative.amountCents !== pending.amountCents || s.cumulative.debtorId !== pending.debtorId;
   const mp = monthParts(month);
@@ -430,6 +442,72 @@ export default async function VisaoGeralPage({
                   )}
                 </span>
               </p>
+            )}
+
+            {settleLines.length > 0 && (
+              <details open className="group rounded-xl border border-zinc-200/70 dark:border-zinc-800">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden">
+                  <span className="font-medium">
+                    O que entra no acerto <span className="font-normal text-zinc-400">· {settleLines.length}</span>
+                  </span>
+                  <span className="text-xs text-blue-600 group-open:hidden dark:text-blue-400">Ver</span>
+                  <span className="hidden text-xs text-blue-600 group-open:inline dark:text-blue-400">Ocultar</span>
+                </summary>
+                <div className="border-t border-zinc-100 px-4 pb-3 dark:border-zinc-800">
+                  {settleGroups.map((g) => (
+                    <div key={g.title}>
+                      <h3 className="mt-3 text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">{g.title}</h3>
+                      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
+                        {g.list.map((l) => {
+                          const pctVal = l.kind === "purchase"
+                            ? purchases.find((p) => p.id === l.sourceId)?.payerSharePct ?? null
+                            : billOf(l)?.payerSharePct ?? null;
+                          const otherId = memberIds.find((m) => m !== l.paidById)!;
+                          return (
+                            <li key={`${l.kind}-${l.sourceId}`}>
+                              <Link
+                                href={l.kind === "purchase" ? `/compras/${l.sourceId}` : `/contas?editar=${l.sourceId}`}
+                                className="flex items-center gap-3 py-2.5 text-[13px]"
+                              >
+                                <span className={`size-2 shrink-0 rounded-full ${MEMBER_COLORS[idx(l.paidById)].dot}`} title={`Pagou: ${names[l.paidById]}`} />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate">
+                                    {l.description}
+                                    {l.of > 1 && <span className="muted"> · {l.number}/{l.of}</span>}
+                                    {l.recurring && <span className="muted"> · 🔁</span>}
+                                  </span>
+                                  <span className="muted block truncate text-[11px]">
+                                    {formatBRL(l.amountCents)} · pagou {l.paidById === me.id ? "você" : names[l.paidById]} ·{" "}
+                                    {splitLabel(pctVal, who(l.paidById), who(otherId)).replace("Você", "você")}
+                                  </span>
+                                </span>
+                                <span className="shrink-0 text-right">
+                                  <span className={`tabular block font-semibold ${l.net > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+                                    {l.net > 0 ? "+" : "−"} {formatBRL(Math.abs(l.net))}
+                                  </span>
+                                  <span className="muted block text-[10px]">{l.net > 0 ? `${partner.name} deve` : "você deve"}</span>
+                                </span>
+                              </Link>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                  <dl className="tabular mt-2 space-y-1 border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800">
+                    <div className="flex justify-between gap-3">
+                      <dt className="muted">Soma do mês</dt>
+                      <dd className="font-semibold">{formatBRL(Math.abs(settleGross))} <span className="font-normal text-zinc-400">· {signed(settleGross)}</span></dd>
+                    </div>
+                    {monthSettlements.length > 0 && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="muted">Transferências do mês</dt>
+                        <dd>− {formatBRL(Math.abs(settledNet))}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </div>
+              </details>
             )}
 
             {monthSettlements.length > 0 && (

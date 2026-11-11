@@ -161,6 +161,16 @@ describe("lojas com nome parecido com linha de resumo", () => {
     expect(r.items.find((i) => i.description === "LOJA X")?.installment).toEqual({ k: 2, n: 3 });
     expect(r.items.filter((i) => i.kind === "credit")).toHaveLength(1);
   });
+  it("parcela antecipada (ANTEC) é crédito, mesmo com valor positivo", () => {
+    const csv = "data,descricao,valor,parcela\n13/10/2026,LOJA Z,21.97,01/03\n13/10/2026,LOJA Z (ANTEC),21.95,02/03\n13/10/2026,LOJA Z (ANTEC),21.95,03/03\n10/10/2026,ANTECIPADORA LTDA,50.00,";
+    const r = parseCsv(csv, "2026-11");
+    expect(r.items.map((i) => [i.description, i.kind])).toEqual([
+      ["LOJA Z", "charge"],
+      ["LOJA Z (ANTEC)", "credit"],
+      ["LOJA Z (ANTEC)", "credit"],
+      ["ANTECIPADORA LTDA", "charge"],
+    ]);
+  });
   it("continua ignorando as linhas de resumo", () => {
     expect(parseStatementLine("10/11 Total da fatura 1.234,56", "2026-11")).toEqual([]);
     expect(parseStatementLine("10/11 Saldo anterior 500,00", "2026-11")).toEqual([]);

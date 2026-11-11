@@ -25,7 +25,9 @@ export interface StatementResult {
 const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 const MONTHS_EN = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
 
-const CREDIT_WORDS = /\b(pagamento|pgto|pag\s+fatura|estorno|cr[eé]dito|desconto|reembolso|cashback|devolu[cç][aã]o|ajuste\s+a\s+cr)/i;
+// Créditos que alguns bancos mostram com valor positivo. "(ANTEC)" = parcela antecipada
+// (desconto das parcelas futuras): subtrai da fatura, não é compra.
+const CREDIT_WORDS = /\b(pagamento|pgto|pag\s+fatura|estorno|cr[eé]dito|desconto|reembolso|cashback|devolu[cç][aã]o|ajuste\s+a\s+cr|antec\b|antecipa[cç][aã]o)/i;
 // Linhas de resumo da fatura (não são compras). A palavra precisa estar inteira:
 // "TOTALPASS" ou "SALDOS & CIA" são lojas, não o "Total" da fatura.
 const SKIP_WORDS = /^(total|subtotal|sub-total|saldo|valor\s+total|limite|pagamento\s+m[ií]nimo|encargos\s+financeiros\s+m[aá]ximos|juros\s+m[aá]ximos)(?![a-z0-9à-ú])/i;
