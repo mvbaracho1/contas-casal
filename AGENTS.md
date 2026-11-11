@@ -66,6 +66,10 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - Os valores do `Receivable` acompanham a compra. Use `syncPurchaseReceivable()` (`lib/receivable-sync.ts`) sempre que salvar uma compra.
   - Não deixe desligar o amigo de uma compra que já tem pagamentos registrados.
   - Os pagamentos são distribuídos da parcela mais antiga para a mais nova.
+- **Excluir fatura ou compras do cartão** (`deleteCardPurchases`, na tela do cartão). O cartão continua em ambos os casos.
+  - "Fatura" apaga as compras com parcela no mês, via `invoicePurchases()` em `lib/finance.ts`. As parceladas saem inteiras. Assinaturas que começaram antes desse mês continuam, para não apagar meses passados.
+  - "Tudo" apaga todas as compras do cartão e exige digitar APAGAR.
+  - Os `Receivable` ligados saem junto, menos os que já têm recebimento: esses ficam, desligados da compra.
 - **Nada que gere custo:** cobrança é por link `wa.me` ou mensagem copiada. Não use APIs pagas (WhatsApp Business, SMS, IA) sem decisão do dono do projeto.
 - Mudou alguma regra de cálculo? **Escreva o teste junto**, no estilo dos testes que já existem.
 

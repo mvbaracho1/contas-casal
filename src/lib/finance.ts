@@ -71,3 +71,17 @@ export function cardOutstanding(purchases: CardPurchase[], cardId: string, fromM
   }
   return total;
 }
+
+/**
+ * Compras que saem ao excluir a fatura de `month` de um cartão: todas as que têm
+ * parcela nessa fatura (a compra inteira sai, com as parcelas dos outros meses).
+ * Assinaturas só saem se começaram nesta fatura; as mais antigas continuam
+ * (ficam em `keptSubscriptions`), senão excluir uma fatura apagaria meses passados.
+ */
+export function invoicePurchases<T extends CardPurchase & { id: string }>(purchases: T[], cardId: string, month: Ym) {
+  const inInvoice = new Set(linesForMonth(purchases.filter((p) => p.cardId === cardId), month).map((l) => l.sourceId));
+  const hit = purchases.filter((p) => inInvoice.has(p.id));
+  const keptSubscriptions = hit.filter((p) => p.recurring && p.firstMonth !== month);
+  const remove = hit.filter((p) => !keptSubscriptions.includes(p));
+  return { remove, keptSubscriptions };
+}

@@ -5,7 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { BILL_CATEGORIES, CARD_COLORS } from "@/lib/finance";
+import { BILL_CATEGORIES, CARD_COLORS, invoicePurchases } from "@/lib/finance";
 import { flash } from "@/lib/flash";
 import { parseBRL } from "@/lib/ledger";
 import type { FormState } from "./actions";
@@ -106,6 +106,40 @@ export async function deleteCard(form: FormData) {
   const { couple } = await requireCouple();
   await prisma.card.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
   await done("/cartoes", "Cartão excluído");
+}
+
+const invoiceDeleteSchema = z.object({
+  cardId: z.string().min(1),
+  month: ym,
+  /** "fatura" = só as compras da fatura do mês; "tudo" = todas as compras do cartão */
+  scope: z.enum(["fatura", "tudo"]),
+  confirm: z.string().optional(),
+});
+
+/**
+ * Exclui a fatura de um mês (as compras com parcela nela) ou todas as compras do cartão.
+ * O cartão continua. Valores "a receber" ligados a essas compras saem junto, exceto os
+ * que já têm recebimento registrado (esses ficam, desligados da compra).
+ */
+export async function deleteCardPurchases(form: FormData) {
+  const { couple } = await requireCouple();
+  const parsed = invoiceDeleteSchema.safeParse(Object.fromEntries(form));
+  if (!parsed.success) return;
+  const { cardId, month, scope } = parsed.data;
+  if (scope === "tudo" && parsed.data.confirm?.trim().toUpperCase() !== "APAGAR") return;
+  const card = await prisma.card.findFirst({ where: { id: cardId, coupleId: couple.id } });
+  if (!card) return;
+
+  const purchases = await prisma.purchase.findMany({ where: { coupleId: couple.id, cardId } });
+  const ids = (scope === "tudo" ? purchases : invoicePurchases(purchases, cardId, month).remove).map((p) => p.id);
+
+  await prisma.$transaction([
+    prisma.receivable.deleteMany({ where: { coupleId: couple.id, purchaseId: { in: ids }, payments: { none: {} } } }),
+    prisma.purchase.deleteMany({ where: { coupleId: couple.id, cardId, id: { in: ids } } }),
+    prisma.paidMark.deleteMany({ where: { coupleId: couple.id, cardId, ...(scope === "fatura" ? { month } : {}) } }),
+  ]);
+  const n = `${ids.length} ${ids.length === 1 ? "compra excluída" : "compras excluídas"}`;
+  await done(`/cartoes/${cardId}?mes=${month}`, scope === "tudo" ? `${card.name}: ${n}` : `Fatura excluída · ${n}`);
 }
 
 // ---------- Contas fixas ----------

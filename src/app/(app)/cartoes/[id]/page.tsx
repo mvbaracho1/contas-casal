@@ -1,14 +1,15 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { togglePaid } from "@/app/actions-finance";
+import { deleteCardPurchases, togglePaid } from "@/app/actions-finance";
+import { ConfirmButton } from "@/components/confirm-button";
 import { CreditCard } from "@/components/credit-card";
-import { IconCheck } from "@/components/icons";
+import { IconCheck, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Money } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
 import { cardInsights } from "@/lib/card-insights";
 import { prisma } from "@/lib/db";
-import { cardOutstanding, dueDate, splitLabel } from "@/lib/finance";
+import { cardOutstanding, dueDate, invoicePurchases, splitLabel } from "@/lib/finance";
 import { addMonths, currentYm, formatBRL, formatYm, incomeByUser, type InstallmentLine } from "@/lib/ledger";
 
 function monthShort(ym: string) {
@@ -30,7 +31,7 @@ export default async function CartaoPage({ params, searchParams }: { params: Pro
     prisma.purchase.findMany({ where: { coupleId: couple.id, cardId: card.id } }),
     prisma.paidMark.findFirst({ where: { coupleId: couple.id, cardId: card.id, month } }),
     prisma.income.findMany({ where: { coupleId: couple.id } }),
-    prisma.receivable.findMany({ where: { coupleId: couple.id, purchase: { cardId: card.id } }, select: { purchaseId: true, personName: true } }),
+    prisma.receivable.findMany({ where: { coupleId: couple.id, purchase: { cardId: card.id } }, select: { purchaseId: true, personName: true, _count: { select: { payments: true } } } }),
   ]);
   const friendBy = new Map(receivables.map((r) => [r.purchaseId!, r.personName]));
   const ctx = { income: incomeByUser(incomes, month, memberIds), memberIds };
@@ -46,6 +47,20 @@ export default async function CartaoPage({ params, searchParams }: { params: Pro
   const status = s.lines.length === 0 ? "Sem fatura" : mark ? "Paga" : "Aberta";
   const maxBar = Math.max(...s.timeline.map((t) => t.totalCents), 1);
   const purchaseById = new Map(purchases.map((p) => [p.id, p]));
+
+  // Exclusão: a fatura do mês (compras com parcela nela) ou tudo do cartão
+  const inv = invoicePurchases(purchases, card.id, month);
+  const invParceladas = inv.remove.filter((p) => p.installments > 1).length;
+  // valores "a receber" ligados: os sem recebimento saem junto; os com recebimento ficam
+  const paidFriend = new Set(receivables.filter((r) => r._count.payments > 0).map((r) => r.purchaseId!));
+  const friendsOf = (list: { id: string }[]) => {
+    const linked = list.filter((p) => friendBy.has(p.id));
+    return { gone: linked.filter((p) => !paidFriend.has(p.id)).length, kept: linked.filter((p) => paidFriend.has(p.id)).length };
+  };
+  const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+  const friendNote = ({ gone, kept }: { gone: number; kept: number }) =>
+    (gone > 0 ? ` ${plural(gone, "valor “a receber” ligado sai", "valores “a receber” ligados saem")} junto.` : "") +
+    (kept > 0 ? ` ${plural(kept, "valor com recebimento registrado continua", "valores com recebimento registrado continuam")} em “A receber”.` : "");
 
   const groups: { title: string; emoji: string; lines: InstallmentLine[] }[] = [
     { title: "Assinaturas", emoji: "🔁", lines: s.lines.filter((l) => l.recurring) },
@@ -297,6 +312,55 @@ export default async function CartaoPage({ params, searchParams }: { params: Pro
                   </li>
                 ))}
               </ol>
+            </section>
+          )}
+          {purchases.length > 0 && (
+            <section className="card space-y-3">
+              <div>
+                <h2 className="card-title">Excluir</h2>
+                <p className="muted text-xs">Para refazer uma importação ou começar o cartão do zero. O cartão continua.</p>
+              </div>
+              {inv.remove.length > 0 && (
+                <form action={deleteCardPurchases}>
+                  <input type="hidden" name="cardId" value={card.id} />
+                  <input type="hidden" name="month" value={month} />
+                  <input type="hidden" name="scope" value="fatura" />
+                  <ConfirmButton
+                    className="btn-outline w-full justify-center py-2 text-sm text-red-600 hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/40"
+                    title={`Excluir a fatura de ${formatYm(month).toLowerCase()}?`}
+                    confirmLabel="Excluir fatura"
+                    message={
+                      <>
+                        <b>{plural(inv.remove.length, "compra", "compras")}</b> desta fatura {inv.remove.length === 1 ? "será apagada" : "serão apagadas"}.
+                        {invParceladas > 0 && ` As parceladas saem inteiras, com as parcelas dos outros meses.`}
+                        {inv.keptSubscriptions.length > 0 && ` ${plural(inv.keptSubscriptions.length, "assinatura antiga continua", "assinaturas antigas continuam")} (${inv.keptSubscriptions.map((p) => p.description).join(", ")}).`}
+                        {friendNote(friendsOf(inv.remove))}
+                      </>
+                    }
+                  >
+                    <IconTrash width={14} height={14} /> Excluir esta fatura · {plural(inv.remove.length, "compra", "compras")}
+                  </ConfirmButton>
+                </form>
+              )}
+              <form action={deleteCardPurchases}>
+                <input type="hidden" name="cardId" value={card.id} />
+                <input type="hidden" name="month" value={month} />
+                <input type="hidden" name="scope" value="tudo" />
+                <ConfirmButton
+                  className="btn-danger w-full justify-center"
+                  title={`Excluir todas as compras do ${card.name}?`}
+                  confirmLabel="Excluir tudo"
+                  requireText="APAGAR"
+                  message={
+                    <>
+                      <b>{plural(purchases.length, "compra", "compras")}</b> do cartão, de todos os meses, {purchases.length === 1 ? "será apagada" : "serão apagadas"}, junto com as marcações de fatura paga. O cartão continua cadastrado.
+                      {friendNote(friendsOf(purchases))} Não dá para desfazer.
+                    </>
+                  }
+                >
+                  <IconTrash width={14} height={14} /> Excluir todas as compras do cartão
+                </ConfirmButton>
+              </form>
             </section>
           )}
         </aside>

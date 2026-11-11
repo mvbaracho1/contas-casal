@@ -353,7 +353,6 @@ export default async function VisaoGeralPage({
                 </>
               ) : (
                 <CardsPanel
-                  monthName={mp.name.toLowerCase()}
                   initialId={selCard!.id}
                   cards={cardInvoices.map((ci) => {
                     const paid = paidMarks.some((m) => m.cardId === ci.card.id && m.month === month);
@@ -364,7 +363,13 @@ export default async function VisaoGeralPage({
                       invoices: [0, 1, 2].map((n) => {
                         const ym = addMonths(month, n);
                         const parts = monthParts(ym);
-                        return { ym, label: `${parts.short} ${String(parts.year).slice(2)}`, totalCents: cardInvoice(purchases, ci.card.id, ym).totalCents };
+                        return {
+                          ym,
+                          label: `${parts.short} ${String(parts.year).slice(2)}`,
+                          name: parts.name.toLowerCase(),
+                          totalCents: cardInvoice(purchases, ci.card.id, ym).totalCents,
+                          detailHref: `/cartoes/${ci.card.id}?mes=${ym}`,
+                        };
                       }),
                       node: (
                         <CreditCard

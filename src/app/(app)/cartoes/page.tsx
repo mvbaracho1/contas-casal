@@ -78,7 +78,7 @@ export default async function CartoesPage() {
                           <input type="hidden" name="id" value={c.id} />
                           <ConfirmButton
                             className="btn-icon size-8 hover:text-red-600" aria-label="Excluir cartão"
-                            title="Excluir cartão?" message={<>O cartão <b>{c.name}</b> será apagado. As compras continuam, mas ficam sem cartão.</>}
+                            title="Excluir cartão?" message={<>O cartão <b>{c.name}</b> será apagado. As compras continuam, mas ficam sem cartão. Para apagar as compras, use “Excluir” na tela do cartão.</>}
                           >
                             <IconTrash width={14} height={14} />
                           </ConfirmButton>

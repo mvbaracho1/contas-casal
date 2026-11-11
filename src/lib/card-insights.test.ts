@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { cardInsights, type CardPurchase } from "./card-insights";
+import { invoicePurchases } from "./finance";
 
 const members: [string, string] = ["ana", "joao"];
 const base = { paidById: "ana", payerSharePct: 50, cardId: "c1", installments: 1, startInstallment: 1 } as const;
@@ -43,5 +44,23 @@ describe("insights do cartão", () => {
     expect(s.committedCents).toBe(230000);
     // o tênis acaba em jan/27: a fatura de fev/27 cai R$ 200
     expect(s.nextRelief).toEqual({ ym: "2027-02", cents: 20000, descriptions: ["Tênis"] });
+  });
+});
+
+describe("excluir a fatura do cartão", () => {
+  it("leva as compras com parcela na fatura, inclusive as parceladas", () => {
+    const r = invoicePurchases(purchases, "c1", "2026-12");
+    expect(r.remove.map((p) => p.id).sort()).toEqual(["mercado", "show", "tenis", "tv"]);
+  });
+  it("mantém assinaturas que começaram antes e não mexe em outro cartão", () => {
+    const r = invoicePurchases(purchases, "c1", "2026-12");
+    expect(r.keptSubscriptions.map((p) => p.id)).toEqual(["netflix"]);
+    expect(r.remove.some((p) => p.cardId === "c2")).toBe(false);
+  });
+  it("apaga a assinatura que começou nesta fatura", () => {
+    expect(invoicePurchases(purchases, "c1", "2026-06").remove.map((p) => p.id)).toEqual(["netflix"]);
+  });
+  it("fatura vazia não apaga nada", () => {
+    expect(invoicePurchases(purchases, "c1", "2026-01")).toEqual({ remove: [], keptSubscriptions: [] });
   });
 });
