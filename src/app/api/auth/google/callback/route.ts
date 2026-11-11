@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { appUrl } from "@/lib/app-url";
 import { startSession } from "@/lib/auth";
+import { INVITE_COOKIE, joinByCode } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
 import { GOOGLE_STATE_COOKIE, googleEnabled, googleProfile } from "@/lib/google";
 
@@ -20,7 +21,9 @@ export async function GET(req: NextRequest) {
   const state = req.nextUrl.searchParams.get("state");
   const jar = await cookies();
   const expected = jar.get(GOOGLE_STATE_COOKIE)?.value;
+  const invite = jar.get(INVITE_COOKIE)?.value;
   jar.delete(GOOGLE_STATE_COOKIE);
+  jar.delete(INVITE_COOKIE);
 
   if (req.nextUrl.searchParams.get("error")) redirect("/login?erro=google_cancelado");
   if (!code || !state || !expected || !sameState(state, expected)) redirect("/login?erro=google_state");
@@ -48,5 +51,6 @@ export async function GET(req: NextRequest) {
   }
 
   await startSession(user.id);
+  if (!user.coupleId && invite && !(await joinByCode(user.id, invite))) redirect("/");
   redirect(user.coupleId ? "/" : "/casal");
 }

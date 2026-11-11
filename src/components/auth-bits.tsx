@@ -30,10 +30,10 @@ export function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>
 }
 
 /** Botão "Continuar com o Google" (link comum: o fluxo é feito no servidor). */
-export function GoogleButton({ label = "Continuar com o Google" }: { label?: string }) {
+export function GoogleButton({ label = "Continuar com o Google", href = "/api/auth/google" }: { label?: string; href?: string }) {
   return (
     <a
-      href="/api/auth/google"
+      href={href}
       className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
     >
       <svg viewBox="0 0 48 48" width={18} height={18} aria-hidden>

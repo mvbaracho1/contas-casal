@@ -19,30 +19,46 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: React.R
   );
 }
 
-export function AuthForm({ mode, googleEnabled, notice }: { mode: "login" | "cadastro"; googleEnabled: boolean; notice?: string }) {
+type Invite = { code: string; inviterName: string; coupleName: string };
+
+export function AuthForm({ mode, googleEnabled, notice, invite, defaultEmail = "" }: {
+  mode: "login" | "cadastro";
+  googleEnabled: boolean;
+  notice?: string;
+  invite?: Invite;
+  defaultEmail?: string;
+}) {
   const [state, action] = useActionState(mode === "login" ? login : register, undefined);
   // Campos controlados: o React 19 limpa o formulário após cada envio,
   // e não queremos apagar o e-mail quando a senha está errada.
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
   const isLogin = mode === "login";
+  // Mantém o convite ao trocar entre login e cadastro.
+  const qs = invite ? `?${new URLSearchParams({ convite: invite.code, ...(email && { email }) })}` : "";
 
   return (
     <Card
       title={isLogin ? "Bem-vindo de volta" : "Crie sua conta"}
       subtitle={isLogin ? "Entre para ver as contas do mês." : "Depois é só convidar seu par com um código."}
     >
+      {invite && (
+        <p className="rounded-xl bg-blue-50 px-3 py-2 text-sm text-blue-900 dark:bg-blue-950/60 dark:text-blue-100">
+          💑 <b>{invite.inviterName}</b> convidou você para o <b>{invite.coupleName}</b>. {isLogin ? "Entre" : "Crie sua conta"} e você já entra no casal.
+        </p>
+      )}
       {notice && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">{notice}</p>}
 
       {googleEnabled && (
         <>
-          <GoogleButton label={isLogin ? "Entrar com o Google" : "Cadastrar com o Google"} />
+          <GoogleButton href={invite ? `/api/auth/google?convite=${invite.code}` : undefined} label={isLogin ? "Entrar com o Google" : "Cadastrar com o Google"} />
           <Divider text={isLogin ? "ou entre com e-mail" : "ou cadastre com e-mail"} />
         </>
       )}
 
       <form action={action} className="space-y-4">
+        {invite && <input type="hidden" name="invite" value={invite.code} />}
         {!isLogin && (
           <div>
             <label className="label" htmlFor="name">Seu nome</label>
@@ -78,9 +94,9 @@ export function AuthForm({ mode, googleEnabled, notice }: { mode: "login" | "cad
 
       <p className="text-center text-sm text-zinc-500">
         {isLogin ? (
-          <>Ainda não tem conta? <Link className="font-semibold text-blue-600 dark:text-blue-400" href="/cadastro">Cadastre-se</Link></>
+          <>Ainda não tem conta? <Link className="font-semibold text-blue-600 dark:text-blue-400" href={`/cadastro${qs}`}>Cadastre-se</Link></>
         ) : (
-          <>Já tem conta? <Link className="font-semibold text-blue-600 dark:text-blue-400" href="/login">Entrar</Link></>
+          <>Já tem conta? <Link className="font-semibold text-blue-600 dark:text-blue-400" href={`/login${qs}`}>Entrar</Link></>
         )}
       </p>
     </Card>

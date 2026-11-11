@@ -2,9 +2,12 @@ import { NextResponse, type NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/session";
 
 const PUBLIC = ["/login", "/cadastro", "/esqueci-senha", "/redefinir-senha", "/api/auth"];
+// Abertas para todos, logado ou não (o link de convite funciona nos dois casos).
+const OPEN = ["/convite/"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
+  if (OPEN.some((p) => pathname.startsWith(p))) return NextResponse.next();
   const isPublic = PUBLIC.some((p) => pathname.startsWith(p));
   const userId = await verifySession(req.cookies.get(SESSION_COOKIE)?.value);
 

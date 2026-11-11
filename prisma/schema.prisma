@@ -12,6 +12,9 @@ model Couple {
   id          String       @id @default(cuid())
   name        String
   inviteCode  String       @unique
+  /// e-mail do par convidado (o convite também funciona só com o código)
+  inviteEmail  String?
+  inviteSentAt DateTime?
   createdAt   DateTime     @default(now())
   members     User[]
   purchases   Purchase[]

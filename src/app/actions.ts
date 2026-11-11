@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, requireCouple, requireUser, startSession } from "@/lib/auth";
+import { INVITE_RESEND_COOLDOWN_MS, joinByCode, sendCoupleInvite } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
 import { parseBRL } from "@/lib/ledger";
 
@@ -33,7 +34,9 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
     data: { name, email, passwordHash: await bcrypt.hash(password, 10) },
   });
   await startSession(user.id);
-  redirect("/casal");
+  // Veio de um link de convite: já entra no casal.
+  const joined = form.get("invite") ? !(await joinByCode(user.id, form.get("invite"))) : false;
+  redirect(joined ? "/" : "/casal");
 }
 
 export async function login(_: FormState, form: FormData): Promise<FormState> {
@@ -47,6 +50,10 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
     return { error: "E-mail ou senha incorretos" };
   }
   await startSession(user.id);
+  if (!user.coupleId && form.get("invite")) {
+    const joined = !(await joinByCode(user.id, form.get("invite")));
+    redirect(joined ? "/" : "/casal");
+  }
   redirect("/");
 }
 
@@ -62,28 +69,57 @@ function newInviteCode() {
   return Array.from(randomBytes(6), (b) => alphabet[b % alphabet.length]).join("");
 }
 
+const partnerEmail = z.string().trim().toLowerCase().email("Informe um e-mail válido para o seu par");
+
 export async function createCouple(_: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   if (user.coupleId) return { error: "Você já faz parte de um casal" };
+  const parsed = partnerEmail.safeParse(form.get("partnerEmail"));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (parsed.data === user.email) return { error: "Use o e-mail do seu par, não o seu" };
+
   const name = String(form.get("name") ?? "").trim() || `Casal de ${user.name}`;
-  await prisma.couple.create({
-    data: { name, inviteCode: newInviteCode(), members: { connect: { id: user.id } } },
+  const couple = await prisma.couple.create({
+    data: { name, inviteCode: newInviteCode(), inviteEmail: parsed.data, members: { connect: { id: user.id } } },
+  });
+  const sent = await sendCoupleInvite({ to: parsed.data, inviterName: user.name, coupleName: name, code: couple.inviteCode });
+  if (sent) await prisma.couple.update({ where: { id: couple.id }, data: { inviteSentAt: new Date() } });
+  revalidatePath("/casal");
+  redirect("/casal");
+}
+
+/** Reenvia o convite (pode trocar o e-mail do par). */
+export async function resendInvite(_: FormState, form: FormData): Promise<FormState> {
+  const user = await requireUser();
+  if (!user.coupleId) return { error: "Crie o casal primeiro" };
+  const couple = await prisma.couple.findUniqueOrThrow({
+    where: { id: user.coupleId },
+    include: { _count: { select: { members: true } } },
+  });
+  if (couple._count.members >= 2) return { error: "O casal já está completo" };
+  const parsed = partnerEmail.safeParse(form.get("partnerEmail"));
+  if (!parsed.success) return { error: parsed.error.issues[0].message };
+  if (parsed.data === user.email) return { error: "Use o e-mail do seu par, não o seu" };
+  if (couple.inviteSentAt && Date.now() - couple.inviteSentAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
+    return { error: "Aguarde um minuto antes de reenviar." };
+  }
+
+  const sent = await sendCoupleInvite({ to: parsed.data, inviterName: user.name, coupleName: couple.name, code: couple.inviteCode });
+  await prisma.couple.update({
+    where: { id: couple.id },
+    data: { inviteEmail: parsed.data, ...(sent && { inviteSentAt: new Date() }) },
   });
   revalidatePath("/casal");
-  return { ok: "Casal criado! Envie o código de convite para seu par." };
+  return sent
+    ? { ok: `Convite enviado para ${parsed.data}.` }
+    : { error: "Não conseguimos enviar o e-mail agora. Mande o código ou o link abaixo para seu par." };
 }
 
 export async function joinCouple(_: FormState, form: FormData): Promise<FormState> {
   const user = await requireUser();
   if (user.coupleId) return { error: "Você já faz parte de um casal" };
-  const code = String(form.get("code") ?? "").trim().toUpperCase();
-  const couple = await prisma.couple.findUnique({
-    where: { inviteCode: code },
-    include: { _count: { select: { members: true } } },
-  });
-  if (!couple) return { error: "Código não encontrado" };
-  if (couple._count.members >= 2) return { error: "Esse casal já está completo" };
-  await prisma.user.update({ where: { id: user.id }, data: { coupleId: couple.id } });
+  const error = await joinByCode(user.id, form.get("code"));
+  if (error) return { error };
   redirect("/");
 }
 
