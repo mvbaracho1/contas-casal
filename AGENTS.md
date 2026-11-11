@@ -36,6 +36,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 |---|---|
 | `src/lib/ledger.ts` | **Lógica pura** de dinheiro: parcelas, divisões, renda e acerto. Sem banco e sem React. Toda regra de cálculo vai aqui, com teste em `ledger.test.ts` |
 | `src/lib/statement.ts` | **Leitor puro** de faturas (texto de PDF, OFX, CSV). Testes em `statement.test.ts` |
+| `src/lib/receivables.ts` | **Lógica pura** dos valores a receber: parcelas, distribuição dos pagamentos, status e mensagem de cobrança. Testes em `receivables.test.ts` |
 | `src/lib/finance.ts` | Funções puras de apresentação e de cartão (`splitLabel`, `cardInvoice`, cores) |
 | `src/lib/*-data.ts`, `db.ts`, `auth.ts`, `mail.ts`… | Código **só de servidor** (`import "server-only"`) |
 | `src/app/actions*.ts` | Server Actions (`"use server"`), separadas por assunto: `actions.ts` (auth, casal, compras, acertos), `actions-finance.ts` (renda, cartões, contas fixas), `actions-password.ts`, `actions-import.ts` |
@@ -56,6 +57,13 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - `startInstallment` diz a partir de qual parcela a compra entra nas contas. As anteriores foram pagas antes do app e não geram linhas.
   - Uma linha "3/10" da fatura de dezembro vira `firstMonth = outubro`, `startInstallment = 3`.
 - **Divisão (`payerSharePct`)** é o % de quem pagou. `null` significa **proporcional à renda do casal naquele mês**, via `incomeSharePct`. Sem renda cadastrada, fica 50/50. Vale para compras e contas fixas.
+- **Valores a receber (`Receivable`)** são só controle: não entram em `summarizeMonth`, no saldo nem no acerto.
+  - Na visão geral, as compras de amigos ficam **à parte**: fora do saldo previsto e de "Compras do mês", mostradas no card "Compras de amigos". Só a fatura do cartão e "Contas a pagar" usam o valor cheio, porque é o que o banco cobra.
+  - Uma compra de amigo no cartão é uma `Purchase` com `payerSharePct = 100`, para ficar toda com o titular, mais um `Receivable` ligado por `purchaseId`.
+  - Os valores do `Receivable` acompanham a compra. Use `syncPurchaseReceivable()` (`lib/receivable-sync.ts`) sempre que salvar uma compra.
+  - Não deixe desligar o amigo de uma compra que já tem pagamentos registrados.
+  - Os pagamentos são distribuídos da parcela mais antiga para a mais nova.
+- **Nada que gere custo:** cobrança é por link `wa.me` ou mensagem copiada. Não use APIs pagas (WhatsApp Business, SMS, IA) sem decisão do dono do projeto.
 - Mudou alguma regra de cálculo? **Escreva o teste junto**, no estilo dos testes que já existem.
 
 ## Servidor x cliente e segurança
@@ -82,6 +90,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 - Em caso de sucesso, chame `revalidatePath("/", "layout")` (ou a rota afetada) e depois `redirect(...)` ou `return { ok }`.
 - No cliente, use `useActionState(acao, undefined)` com `<Submit>` e `<Message state={state} />` de `components/form-bits.tsx`.
 - **O React 19 limpa o formulário depois de cada envio.** Campos que o usuário não deve perder quando dá erro (e-mail, senha, nome) precisam ser **controlados** com `useState`. Campos de arquivo também: guarde o `File` no estado.
+- **Toast de sucesso:** toda action que grava algo chama `await flash("Mensagem curta")` (`lib/flash.ts`) antes do `redirect`/`revalidatePath("/", "layout")`. O `<Toaster />` (no layout raiz) mostra o aviso e apaga o cookie. Erros continuam inline no formulário com `{ error }`. Não repita o sucesso inline: devolva `{}` em vez de `{ ok }`. A exceção é a tela de "esqueci a senha", que troca de conteúdo.
 - Para enviar listas complexas, como na importação, mande um campo oculto `payload` com JSON e valide com zod no servidor.
 
 ## Interface
@@ -133,7 +142,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 ## Armadilhas conhecidas
 
 - **Windows, `c:` x `C:`:** se o terminal estiver em `c:\...` com c minúsculo, o Next carrega módulos duas vezes. O resultado é o erro *"Could not find the module … in the React Client Manifest"* no dev, ou *"<Html> should not be imported…"* no build. Rode a partir de `C:\` maiúsculo e apague a pasta `.next`.
-- **Um `next dev` por vez:** dois servidores na mesma pasta compartilham o `.next` e corrompem o cache. O sintoma é o erro *"Could not find the module … in the React Client Manifest"*, até em módulos internos do Next. Para testar em outra porta com o `pnpm dev` aberto, use outro `distDir` ou pare o servidor principal. Se o erro aparecer, pare todos os servidores e apague `.next`.
+- **Um `next dev` por vez:** dois servidores na mesma pasta compartilham o `.next` e corrompem o cache. O sintoma é o erro *"Could not find the module … in the React Client Manifest"*, até em módulos internos do Next. Para testar em outra porta com o `pnpm dev` aberto, use outra pasta: `NEXT_DIST_DIR=.next-teste pnpm next dev -p 3200`. Esse servidor acrescenta a pasta ao `tsconfig.json`: desfaça com `git checkout -- tsconfig.json` e apague a pasta depois do teste. Se o erro aparecer, pare todos os servidores e apague `.next`.
 - **Prisma `EPERM` no Windows:** com algum `pnpm dev` aberto, o `prisma generate` não consegue trocar a DLL do engine. Os tipos são gerados mesmo assim. Para regenerar tudo, pare os servidores antes.
 - **Vercel e cache:** o `postinstall` pode não rodar quando o build reaproveita o cache. Por isso o script `build` chama `prisma generate` explicitamente. Não remova.
 - **Limite de upload:** as Server Actions aceitam até 5 MB (`next.config.ts`) e a Vercel até 4,5 MB. A tela de importação limita o arquivo a 4 MB.

@@ -35,3 +35,9 @@ export async function incomePercents(coupleId: string, memberIds: [string, strin
   const a = Math.round((income[memberIds[0]] / total) * 100);
   return { [memberIds[0]]: a, [memberIds[1]]: 100 - a } as Record<string, number>;
 }
+
+/** Nomes já usados em "A receber" (sugestões no campo do amigo). */
+export async function receivablePeople(coupleId: string) {
+  const rows = await prisma.receivable.findMany({ where: { coupleId }, select: { personName: true }, distinct: ["personName"] });
+  return [...new Set(rows.map((r) => r.personName.trim()))].sort();
+}

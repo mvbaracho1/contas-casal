@@ -66,3 +66,7 @@ export const IconMenu = (p: P) => (
 export const IconAlert = (p: P) => (
   <Svg {...p}><circle cx="12" cy="12" r="10" /><path d="M12 8v4" /><path d="M12 16h.01" /></Svg>
 );
+/** Mão recebendo moedas (valores a receber). */
+export const IconReceive = (p: P) => (
+  <Svg {...p}><circle cx="16" cy="6" r="3" /><path d="M2 15h3l4.5 3.5a2 2 0 0 0 2.5 0L18 14a1.6 1.6 0 0 0-2.2-2.3L12.5 14" /><path d="M5 15V12a2 2 0 0 1 2-2h3.5a2 2 0 0 1 0 4H9" /><path d="M2 21h3v-6" /></Svg>
+);

@@ -14,6 +14,7 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
   const purchases = await prisma.purchase.findMany({
     where: { coupleId: couple.id },
     orderBy: [{ purchaseDate: "desc" }, { createdAt: "desc" }],
+    include: { receivable: { select: { personName: true } } },
   });
   const now = ymToIndex(currentYm());
   const active = purchases.filter((p) => ymToIndex(p.firstMonth) + p.installments - 1 >= now);
@@ -69,7 +70,8 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
                         )}
                       </p>
                       <p className="muted truncate text-xs">
-                        Pago por {names[p.paidById]} · {splitLabel(p.payerSharePct, names[p.paidById], names[other])}
+                        Pago por {names[p.paidById]} ·{" "}
+                        {p.receivable ? `🤝 De ${p.receivable.personName} · a receber` : splitLabel(p.payerSharePct, names[p.paidById], names[other])}
                       </p>
                       {p.installments > 1 ? (
                         <div className="mt-1.5 flex items-center gap-2">

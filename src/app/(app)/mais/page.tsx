@@ -1,10 +1,11 @@
 import Link from "next/link";
 import { logout } from "@/app/actions";
-import { IconCard, IconChevronRight, IconLogout, IconUsers, IconWallet } from "@/components/icons";
+import { IconCard, IconChevronRight, IconLogout, IconReceive, IconUsers, IconWallet } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { ThemeToggle } from "@/components/theme-toggle";
 
 const MORE_LINKS = [
+  { href: "/receber", label: "A receber", desc: "Compras de amigos no cartão e quem te deve", icon: IconReceive },
   { href: "/cartoes", label: "Cartões", desc: "Faturas, limites e vencimentos", icon: IconCard },
   { href: "/renda", label: "Nossa renda", desc: "Salários e proporção do casal", icon: IconWallet },
   { href: "/casal", label: "Casal", desc: "Membros e código de convite", icon: IconUsers },

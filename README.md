@@ -31,6 +31,12 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
 - **Cartões:** titular, dia de fechamento e vencimento, limite e cor. A fatura do mês é a soma das parcelas daquele cartão.
 - **Contas fixas:** aluguel, luz, assinaturas etc., com vencimento e divisão. Também podem ser divididas proporcionalmente à renda.
 - **Nossa renda:** salário e outras rendas de cada um, com mês de início e de fim.
+- **A receber**
+  - Controle de compras feitas por amigos no seu cartão e de outros valores que te devem: parcelas, pagamentos parciais e status (em dia, atrasado ou quitado).
+  - No cadastro ou na importação de uma compra, escolha **"De um amigo"**. A compra continua na fatura do cartão, fica toda com o titular e não gera dívida entre o casal. O valor vai para "A receber".
+  - Para cobrar, há o botão **"Cobrar no WhatsApp"** (um link `wa.me`, gratuito, que só abre o WhatsApp com a mensagem pronta) e o botão "Copiar mensagem".
+  - A visão geral avisa quando há valor vencido.
+  - É só controle: não entra no saldo nem no acerto do casal.
 - **Visão geral do mês**
   - Saldo previsto, contas a pagar, faturas dos cartões, moradia e compras do mês.
   - **Acerto:** quem envia quanto para quem. Depois do Pix, registre a transferência e o mês fica zerado. Pendências de meses anteriores aparecem no acerto.
@@ -119,6 +125,7 @@ src/app/api/auth/       login com Google (OAuth)
 src/components/         componentes de UI e formulários
 src/lib/ledger.ts       cálculo das parcelas, divisões e acertos (puro, testado)
 src/lib/statement.ts    leitor de faturas PDF/OFX/CSV (puro, testado)
+src/lib/receivables.ts  parcelas, pagamentos e cobrança dos valores a receber (puro, testado)
 src/middleware.ts       protege as rotas que exigem login
 ```
 

@@ -8,9 +8,11 @@ import { QuickSettle } from "@/components/quick-settle";
 import { SettlementForm } from "@/components/settlement-form";
 import { Avatar, fmtPct, Illustration, MEMBER_COLORS, Money, pct } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
-import { BILL_EMOJI, cardInvoice, cardOutstanding, dueDate } from "@/lib/finance";
+import { BILL_EMOJI, cardInvoice, cardOutstanding, dueDate, splitLabel } from "@/lib/finance";
 import { loadCoupleData } from "@/lib/finance-data";
 import { addMonths, currentYm, formatBRL, incomeByUser, summarizeMonth, type InstallmentLine } from "@/lib/ledger";
+import { prisma } from "@/lib/db";
+import { summarizeReceivable } from "@/lib/receivables";
 
 function monthParts(ym: string) {
   const [y, m] = ym.split("-").map(Number);
@@ -39,7 +41,41 @@ export default async function VisaoGeralPage({
     return `/?${p}`;
   };
 
-  const { purchases, settlements, incomes, cards, bills, paidMarks } = await loadCoupleData(couple.id);
+  const [{ purchases, settlements, incomes, cards, bills, paidMarks }, receivables] = await Promise.all([
+    loadCoupleData(couple.id),
+    prisma.receivable.findMany({ where: { coupleId: couple.id }, include: { payments: { select: { amountCents: true } } } }),
+  ]);
+  // Lembrete de cobrança: valores de terceiros vencidos (sempre em relação a hoje)
+  const lateReceivables = receivables
+    .map((r) => ({ r, s: summarizeReceivable(r, r.payments, currentYm()) }))
+    .filter((x) => x.s.overdueCents > 0);
+  const lateTotal = lateReceivables.reduce((a, x) => a + x.s.overdueCents, 0);
+  const latePeople = [...new Set(lateReceivables.map((x) => x.r.personName.trim()))];
+
+  // ---------- Compras de amigos (o que cada um deve na fatura do mês) ----------
+  const friendItems = receivables.flatMap((r) => {
+    const sum = summarizeReceivable(r, r.payments, currentYm());
+    const row = sum.rows.find((x) => x.month === month);
+    return row ? [{ r, row }] : [];
+  });
+  const friendGroups = [...friendItems.reduce((m, x) => {
+    const key = x.r.personName.trim().toLowerCase();
+    const g = m.get(key) ?? { name: x.r.personName.trim(), items: [] as typeof friendItems };
+    g.items.push(x);
+    return m.set(key, g);
+  }, new Map<string, { name: string; items: typeof friendItems }>()).values()]
+    .map((g) => {
+      const amount = g.items.reduce((a, x) => a + x.row.amountCents, 0);
+      const paid = g.items.reduce((a, x) => a + x.row.paidCents, 0);
+      const late = g.items.some((x) => x.row.status === "vencido");
+      return { ...g, amount, paid, late };
+    })
+    .sort((a, b) => b.amount - b.paid - (a.amount - a.paid));
+  // compras de amigos ficam à parte: fora do saldo previsto e de "Compras do mês"
+  const friendByPurchase = new Map(receivables.filter((r) => r.purchaseId).map((r) => [r.purchaseId!, r.personName.trim()]));
+  const friendTotal = friendGroups.reduce((a, g) => a + g.amount, 0);
+  const friendPaid = friendGroups.reduce((a, g) => a + g.paid, 0);
+  const friendOpenAll = receivables.reduce((a, r) => a + summarizeReceivable(r, r.payments, currentYm()).remainingCents, 0);
   const s = summarizeMonth(purchases, settlements, month, memberIds, { bills, incomes });
   const monthSettlements = settlements.filter((x) => x.month === month);
   const pending = s.monthPending;
@@ -51,8 +87,11 @@ export default async function VisaoGeralPage({
   // ---------- Minha parte de cada linha ----------
   const myShare = (l: InstallmentLine) => (l.paidById === me.id ? l.payerShareCents : l.otherShareCents);
   const billLines = s.lines.filter((l) => l.kind === "bill");
-  const purchaseLines = s.lines.filter((l) => l.kind === "purchase");
+  const purchaseLines = s.lines.filter((l) => l.kind === "purchase" && !friendByPurchase.has(l.sourceId));
+  const friendLines = s.lines.filter((l) => l.kind === "purchase" && friendByPurchase.has(l.sourceId));
   const isPersonal = (l: InstallmentLine) => l.payerShareCents === l.amountCents || l.otherShareCents === l.amountCents;
+  // Contas divididas = as que os dois pagam juntos. "Só de um" ficam como contas pessoais.
+  const billOf = (l: InstallmentLine) => bills.find((b) => b.id === l.sourceId);
   const houseLines = billLines.filter((l) => !isPersonal(l)).sort((a, b) => b.amountCents - a.amountCents);
 
   // ---------- Saldo previsto ----------
@@ -65,7 +104,7 @@ export default async function VisaoGeralPage({
   const leftover = myIncome - myHouse - myPersonal - myPurchases;
   const barBase = Math.max(myIncome, myHouse + myPersonal + myPurchases, 1);
   const buckets = [
-    { label: "Sua parte da casa", cents: myHouse, color: "bg-blue-900 dark:bg-blue-700" },
+    { label: "Contas divididas", cents: myHouse, color: "bg-blue-900 dark:bg-blue-700" },
     { label: "Contas pessoais", cents: myPersonal, color: "bg-blue-600" },
     { label: "Compras", cents: myPurchases, color: "bg-sky-400" },
   ];
@@ -95,7 +134,7 @@ export default async function VisaoGeralPage({
   today.setHours(0, 0, 0, 0);
   const daysToNext = nextOpen ? Math.round((dueDate(month, nextOpen.dueDay).getTime() - today.getTime()) / 86400000) : null;
 
-  // ---------- Divisão da casa ----------
+  // ---------- Contas divididas ----------
   const houseTotal = sum(houseLines.map((l) => l.amountCents));
   const houseShare: Record<string, number> = Object.fromEntries(
     memberIds.map((id) => [id, sum(houseLines.map((l) => (l.paidById === id ? l.payerShareCents : l.otherShareCents)))]),
@@ -136,6 +175,20 @@ export default async function VisaoGeralPage({
         title={<>{mp.name} <span className="font-normal text-zinc-400">{mp.year}</span></>}
         actions={!isCurrent && <Link href="/" className="btn-outline">Hoje</Link>}
       />
+
+      {lateTotal > 0 && (
+        <Link
+          href="/receber"
+          className="flex items-center gap-3 rounded-2xl border border-red-200/70 bg-red-50 px-4 py-3 text-sm text-red-900 transition hover:bg-red-100 dark:border-red-900/60 dark:bg-red-950/50 dark:text-red-200 dark:hover:bg-red-950"
+        >
+          <span aria-hidden className="text-xl">🔔</span>
+          <span className="min-w-0 flex-1">
+            <b className="tabular">{formatBRL(lateTotal)}</b> vencido a receber de{" "}
+            <span className="font-semibold">{latePeople.length <= 2 ? latePeople.join(" e ") : `${latePeople.slice(0, 2).join(", ")} e mais ${latePeople.length - 2}`}</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold">Cobrar →</span>
+        </Link>
+      )}
 
       {/* Grid com linhas alinhadas: 1 coluna no celular, 2 no tablet, 3 no desktop. Os wrappers são "contents". */}
       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -195,19 +248,23 @@ export default async function VisaoGeralPage({
           </section>
 
           <div className="contents">
-            {/* Divisão da casa */}
+            {/* Contas divididas entre o casal */}
             <section className="card order-3 flex min-w-0 flex-col">
               <div className="flex items-start justify-between gap-3">
                 <div>
-                  <h2 className="card-title">Divisão da casa</h2>
-                  <p className="muted mt-3 text-xs">Total das contas</p>
+                  <h2 className="card-title">Contas divididas</h2>
+                  <p className="muted mt-3 text-xs">Total das contas fixas que vocês dividem</p>
                   <Money cents={houseTotal} size="lg" />
                 </div>
                 <Illustration emoji="⚖️" />
               </div>
 
               {houseLines.length === 0 ? (
-                empty("Cadastre as contas da casa (aluguel, condomínio, luz…) para ver quanto cabe a cada um.", "/contas", "Adicionar conta")
+                empty(
+                  "Nenhuma conta fixa dividida entre vocês. Contas marcadas como “Só de” um de vocês ficam em Contas pessoais.",
+                  "/contas",
+                  "Ver contas fixas",
+                )
               ) : (
                 <>
                   <div className="mt-4 flex justify-between gap-2 text-xs">
@@ -235,7 +292,12 @@ export default async function VisaoGeralPage({
                       <li key={l.sourceId}>
                         <Link href={`/contas?editar=${l.sourceId}`} className="flex items-center gap-3 py-2.5 text-[13px]">
                           <span className={`size-2 shrink-0 rounded-full ${MEMBER_COLORS[idx(l.paidById)].dot}`} title={`Paga: ${names[l.paidById]}`} />
-                          <span className="min-w-0 flex-1 truncate">{l.description}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">{l.description}</span>
+                            <span className="muted block truncate text-[11px]">
+                              paga {l.paidById === me.id ? "você" : names[l.paidById]} · {splitLabel(billOf(l)?.payerSharePct ?? null, who(l.paidById), who(memberIds.find((m) => m !== l.paidById)!)).replace("Você", "você")}
+                            </span>
+                          </span>
                           <span className="tabular font-semibold">{formatBRL(l.amountCents)}</span>
                         </Link>
                       </li>
@@ -251,7 +313,7 @@ export default async function VisaoGeralPage({
                           <IconArrowRight width={12} height={12} className="text-zinc-400" />
                           <Avatar name={houseNet > 0 ? me.name : partner.name} index={idx(houseNet > 0 ? me.id : partner.id)} size="sm" />
                           <span className="min-w-0">
-                            {houseNet > 0 ? `${partner.name} te devolve` : `Você devolve a ${partner.name}`} <b>{formatBRL(Math.abs(houseNet))}</b> da casa
+                            {houseNet > 0 ? `${partner.name} te devolve` : `Você devolve a ${partner.name}`} <b>{formatBRL(Math.abs(houseNet))}</b>
                           </span>
                         </>
                       )}
@@ -330,7 +392,7 @@ export default async function VisaoGeralPage({
           </div>
 
           {/* Acerto do mês */}
-          <section id="acerto" className={`card order-6 flex min-w-0 flex-col gap-4 md:col-span-2 ${lines.length > 2 ? "xl:min-h-[28rem]" : ""}`}>
+          <section id="acerto" className={`card order-7 flex min-w-0 flex-col gap-4 md:col-span-2 ${lines.length > 2 ? "xl:min-h-[28rem]" : ""}`}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="card-title">Acerto do mês</h2>
@@ -404,6 +466,85 @@ export default async function VisaoGeralPage({
             </details>
           </section>
         </div>
+
+        {/* Compras de amigos: faixa inteira logo abaixo dos cartões */}
+        <section id="amigos" className="card order-6 min-w-0 scroll-mt-4 md:col-span-2 xl:col-span-3">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <h2 className="card-title">Compras de amigos</h2>
+              <p className="muted text-xs">O que terceiros devem na fatura de {mp.name.toLowerCase()}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {friendTotal > 0 && (
+                <div className="text-right">
+                  <Money cents={friendTotal - friendPaid} size="md" />
+                  <p className="muted text-[11px]">
+                    {friendPaid > 0 ? `recebido ${formatBRL(friendPaid)} de ${formatBRL(friendTotal)}` : `a receber neste mês`}
+                  </p>
+                </div>
+              )}
+              <span className="text-3xl" aria-hidden>🤝</span>
+            </div>
+          </div>
+
+          {friendGroups.length === 0 ? (
+            <p className="mt-3 rounded-xl border border-dashed border-zinc-200 px-4 py-3 text-center text-sm text-zinc-500 dark:border-zinc-700">
+              Nenhuma compra de amigo nesta fatura. Ao lançar ou importar uma compra, escolha <b>“De um amigo”</b>.
+            </p>
+          ) : (
+            <ul className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+              {friendGroups.map((g) => {
+                const done = g.paid >= g.amount;
+                const status = done
+                  ? { label: "Pago", cls: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300" }
+                  : g.late
+                    ? { label: "Vencido", cls: "bg-red-50 text-red-700 dark:bg-red-950 dark:text-red-300" }
+                    : g.paid > 0
+                      ? { label: "Pago em parte", cls: "bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300" }
+                      : { label: "A receber", cls: "bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300" };
+                return (
+                  <li key={g.name}>
+                    <Link
+                      href={g.items.length === 1 ? `/receber?ver=${g.items[0].r.id}` : "/receber"}
+                      className="flex h-full flex-col gap-2 rounded-xl border border-zinc-200/70 p-3 transition hover:border-blue-300 hover:bg-blue-50/40 dark:border-zinc-800 dark:hover:border-blue-800 dark:hover:bg-blue-950/20"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-xs font-semibold text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                          {g.name.charAt(0).toUpperCase()}
+                        </span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">{g.name}</span>
+                        <span className={`pill shrink-0 ${status.cls}`}>{status.label}</span>
+                      </div>
+                      <ul className="space-y-0.5 text-xs text-zinc-500">
+                        {g.items.slice(0, 3).map(({ r, row }) => (
+                          <li key={r.id} className="flex justify-between gap-2">
+                            <span className="truncate">
+                              {r.description}
+                              {r.installments > 1 && <span className="text-zinc-400"> · {row.number}/{r.installments}</span>}
+                            </span>
+                            <span className="tabular shrink-0">{formatBRL(row.amountCents)}</span>
+                          </li>
+                        ))}
+                        {g.items.length > 3 && <li className="text-zinc-400">+ {g.items.length - 3} compras</li>}
+                      </ul>
+                      <p className="mt-auto flex items-baseline justify-between border-t border-zinc-100 pt-2 text-sm dark:border-zinc-800">
+                        <span className="text-xs text-zinc-500">{done ? "Recebido" : "Falta"}</span>
+                        <span className={`tabular font-semibold ${g.late && !done ? "text-red-600 dark:text-red-400" : ""}`}>
+                          {formatBRL(done ? g.amount : g.amount - g.paid)}
+                        </span>
+                      </p>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {friendOpenAll > friendTotal - friendPaid && (
+            <Link href="/receber" className="mt-3 inline-flex text-xs font-semibold text-blue-600 dark:text-blue-400">
+              Total em aberto com amigos (todos os meses): {formatBRL(friendOpenAll)} →
+            </Link>
+          )}
+        </section>
 
         {/* ================= Coluna lateral ================= */}
         <div className="contents">
@@ -545,12 +686,20 @@ export default async function VisaoGeralPage({
           </section>
 
           {/* Compras do mês */}
-          <section className={`card order-7 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${lines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}>
+          <section className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${lines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}>
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="card-title">Compras do mês <span className="muted font-normal">· {purchaseLines.length}</span></h2>
                 <div className="mt-2"><Money cents={sum(lines.map((l) => l.amountCents))} size="lg" /></div>
-                <p className="muted mt-0.5 text-xs">{filterId ? `pagas por ${who(filterId).toLowerCase()}` : "parcelas de todas as compras"}</p>
+                <p className="muted mt-0.5 text-xs">{filterId ? `pagas por ${who(filterId).toLowerCase()}` : "parcelas das compras do casal"}</p>
+                {(() => {
+                  const fl = friendLines.filter((l) => !filterId || l.paidById === filterId);
+                  return fl.length > 0 ? (
+                    <a href="#amigos" className="mt-1 inline-flex text-[11px] font-medium text-blue-600 dark:text-blue-400">
+                      + {formatBRL(sum(fl.map((l) => l.amountCents)))} de amigos, à parte →
+                    </a>
+                  ) : null;
+                })()}
               </div>
               <Illustration emoji="🧾" />
             </div>
@@ -587,7 +736,7 @@ export default async function VisaoGeralPage({
                             {l.of > 1 && <span className="pill shrink-0 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{l.number}/{l.of}</span>}
                           </span>
                           <span className="muted block truncate text-[11px]">
-                            {l.otherShareCents > 0 ? `${who(other)} deve ${formatBRL(l.otherShareCents)}` : `Só de ${who(l.paidById).toLowerCase()}`}
+{l.otherShareCents > 0 ? `${who(other)} deve ${formatBRL(l.otherShareCents)}` : `Só de ${who(l.paidById).toLowerCase()}`}
                           </span>
                         </span>
                         <span className="tabular text-[13px] font-semibold">{formatBRL(l.amountCents)}</span>

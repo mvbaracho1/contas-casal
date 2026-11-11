@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { flash } from "@/lib/flash";
 import { addMonths, currentYm } from "@/lib/ledger";
 import { parseCsv, parseOfx, parseStatementText, type StatementResult } from "@/lib/statement";
 import { PdfPasswordError, pdfLines } from "@/lib/statement-pdf";
@@ -80,6 +81,8 @@ const importSchema = z.object({
         /** null = proporcional à renda */
         payerSharePct: z.number().int().min(0).max(100).nullable(),
         category: z.string().trim().max(60).nullable().optional(),
+        /** compra de um amigo no cartão: vira um valor "a receber" */
+        friendName: z.string().trim().max(80).optional(),
       }).refine((i) => i.k <= i.n, "Parcela inválida"),
     )
     .min(1, "Selecione ao menos um lançamento")
@@ -105,8 +108,9 @@ export async function importStatement(_: { error?: string } | undefined, form: F
     if (card.ownerId !== d.paidById) return { error: "Esse cartão é de outra pessoa" };
   }
 
-  await prisma.purchase.createMany({
-    data: d.items.map((i) => ({
+  const rows = d.items.map((i) => {
+    const friendName = i.friendName?.trim() || "";
+    const purchase = {
       coupleId: couple.id,
       description: i.description,
       category: i.category || null,
@@ -117,10 +121,43 @@ export async function importStatement(_: { error?: string } | undefined, form: F
       firstMonth: addMonths(d.month, -(i.k - 1)),
       purchaseDate: new Date(`${i.date ?? `${d.month}-01`}T12:00:00Z`),
       paidById: d.paidById,
-      payerSharePct: i.payerSharePct,
+      // compra de amigo fica toda com o titular (não gera dívida no casal)
+      payerSharePct: friendName ? 100 : i.payerSharePct,
       cardId: d.cardId,
-    })),
+    };
+    return { purchase, friendName };
   });
+
+  await prisma.$transaction([
+    prisma.purchase.createMany({ data: rows.filter((r) => !r.friendName).map((r) => r.purchase) }),
+    // compras de amigos: cria a compra já com o valor a receber ligado
+    ...rows
+      .filter((r) => r.friendName)
+      .map(({ purchase: p, friendName }) =>
+        prisma.purchase.create({
+          data: {
+            ...p,
+            receivable: {
+              create: {
+                coupleId: couple.id,
+                creditorId: d.paidById,
+                personName: friendName,
+                description: p.description,
+                totalCents: p.totalCents,
+                installments: p.installments,
+                startInstallment: p.startInstallment,
+                firstMonth: p.firstMonth,
+              },
+            },
+          },
+        }),
+      ),
+  ]);
+  const friends = rows.filter((r) => r.friendName).length;
+  await flash(
+    `${d.items.length} ${d.items.length === 1 ? "compra importada" : "compras importadas"}` +
+      (friends ? ` · ${friends} para “A receber”` : ""),
+  );
   revalidatePath("/", "layout");
   redirect(`/?mes=${d.month}`);
 }

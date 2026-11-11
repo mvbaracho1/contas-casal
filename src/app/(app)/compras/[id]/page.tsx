@@ -5,15 +5,19 @@ import { PageHeader } from "@/components/page-header";
 import { PurchaseForm } from "@/components/purchase-form";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { cardOptions, incomePercents } from "@/lib/finance-data";
+import { cardOptions, incomePercents, receivablePeople } from "@/lib/finance-data";
 import { currentYm } from "@/lib/ledger";
 
 export default async function EditarCompraPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   const { couple, memberIds } = await requireCouple();
-  const p = await prisma.purchase.findFirst({ where: { id, coupleId: couple.id } });
+  const p = await prisma.purchase.findFirst({ where: { id, coupleId: couple.id }, include: { receivable: { select: { personName: true } } } });
   if (!p) notFound();
-  const [cards, incomePct] = await Promise.all([cardOptions(couple.id), incomePercents(couple.id, memberIds, currentYm())]);
+  const [cards, incomePct, people] = await Promise.all([
+    cardOptions(couple.id),
+    incomePercents(couple.id, memberIds, currentYm()),
+    receivablePeople(couple.id),
+  ]);
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
@@ -32,6 +36,7 @@ export default async function EditarCompraPage({ params }: { params: Promise<{ i
         members={couple.members}
         cards={cards}
         incomePct={incomePct}
+        people={people}
         defaults={{
           id: p.id,
           description: p.description,
@@ -43,6 +48,7 @@ export default async function EditarCompraPage({ params }: { params: Promise<{ i
           purchaseDate: p.purchaseDate.toISOString().slice(0, 10),
           paidById: p.paidById,
           payerSharePct: p.payerSharePct,
+          friendName: p.receivable?.personName ?? null,
           cardId: p.cardId,
         }}
       />

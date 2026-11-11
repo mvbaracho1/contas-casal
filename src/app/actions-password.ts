@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { appUrl } from "@/lib/app-url";
 import { startSession } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { flash } from "@/lib/flash";
 import { sendMail } from "@/lib/mail";
 import { findValidResetToken, hashResetToken } from "@/lib/password-reset";
 import type { FormState } from "./actions";
@@ -71,5 +72,6 @@ export async function resetPassword(_: FormState, form: FormData): Promise<FormS
     prisma.passwordResetToken.deleteMany({ where: { userId: row.userId } }),
   ]);
   await startSession(row.userId);
+  await flash("Senha alterada! Você já está conectado.");
   redirect("/");
 }

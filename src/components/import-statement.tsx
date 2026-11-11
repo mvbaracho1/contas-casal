@@ -17,6 +17,7 @@ export function ImportStatement({
   existing,
   defaultMonth,
   incomePct,
+  people = [],
 }: {
   members: Member[];
   meId: string;
@@ -24,6 +25,7 @@ export function ImportStatement({
   existing: ExistingPurchase[];
   defaultMonth: string;
   incomePct: Record<string, number> | null;
+  people?: string[];
 }) {
   const [readState, readAction] = useActionState(readStatement, undefined);
   const [cardId, setCardId] = useState(cards[0]?.id ?? "");
@@ -52,6 +54,7 @@ export function ImportStatement({
         card={cards.find((c) => c.id === cardId)}
         existing={existing}
         incomePct={incomePct}
+        people={people}
         onBack={() => setDismissed(result)}
       />
     );
@@ -145,7 +148,7 @@ export function ImportStatement({
 type Row = StatementItem & { id: number };
 
 function Review({
-  items, dueMonth, detected, fileName, members, payerId, cardId, card, existing, incomePct, onBack,
+  items, dueMonth, detected, fileName, members, payerId, cardId, card, existing, incomePct, people, onBack,
 }: {
   items: StatementItem[];
   dueMonth: string;
@@ -157,6 +160,7 @@ function Review({
   card: CardOption | undefined;
   existing: ExistingPurchase[];
   incomePct: Record<string, number> | null;
+  people: string[];
   onBack: () => void;
 }) {
   const [state, action] = useActionState(importStatement, undefined);
@@ -167,6 +171,8 @@ function Review({
   const [share, setShare] = useState<Record<number, string>>({});
   // Padrão: a compra é de quem é a fatura (o titular do cartão).
   const [defaultShare, setDefaultShare] = useState("100");
+  // compras de amigos no cartão: nome de quem vai pagar (vai para "A receber")
+  const [friendNames, setFriendNames] = useState<Record<number, string>>({});
 
   const payer = members.find((m) => m.id === payerId)!;
   const other = members.find((m) => m.id !== payerId)!;
@@ -176,8 +182,10 @@ function Review({
     { v: "100", label: `Só de ${payer.name}` },
     { v: "0", label: `Só de ${other.name}` },
   ];
+  const rowOptions = [...shareOptions, { v: "amigo", label: "De um amigo…" }];
   const shareOf = (r: Row) => share[r.id] ?? defaultShare;
-  const otherPct = (s: string) => (s === "renda" ? (incomePct?.[other.id] ?? 50) : 100 - Number(s));
+  const otherPct = (s: string) => (s === "amigo" ? 0 : s === "renda" ? (incomePct?.[other.id] ?? 50) : 100 - Number(s));
+  const friendOf = (r: Row) => (friendNames[r.id] ?? "").trim();
 
   const charges = rows.filter((r) => r.kind === "charge");
   const credits = rows.filter((r) => r.kind === "credit");
@@ -186,6 +194,9 @@ function Review({
   const selected = charges.filter(isPicked);
   const total = selected.reduce((a, r) => a + r.amountCents, 0);
   const owed = selected.reduce((a, r) => a + Math.round((r.amountCents * otherPct(shareOf(r))) / 100), 0);
+  const fromFriends = selected.filter((r) => shareOf(r) === "amigo");
+  const missingFriend = fromFriends.some((r) => !friendOf(r));
+  const friendsTotal = fromFriends.reduce((a, r) => a + r.amountCents, 0);
 
   const payload = JSON.stringify({
     cardId,
@@ -197,7 +208,8 @@ function Review({
       amountCents: r.amountCents,
       k: r.installment?.k ?? 1,
       n: r.installment?.n ?? 1,
-      payerSharePct: shareOf(r) === "renda" ? null : Number(shareOf(r)),
+      payerSharePct: shareOf(r) === "amigo" ? 100 : shareOf(r) === "renda" ? null : Number(shareOf(r)),
+      friendName: shareOf(r) === "amigo" ? friendOf(r) : undefined,
     })),
   });
 
@@ -302,9 +314,18 @@ function Review({
                           onChange={(e) => setShare((s) => ({ ...s, [r.id]: e.target.value }))}
                           aria-label="De quem é"
                         >
-                          {shareOptions.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
+                          {rowOptions.map((o) => <option key={o.v} value={o.v}>{o.label}</option>)}
                         </select>
                         <p className="tabular text-right text-sm font-semibold sm:w-24">{formatBRL(r.amountCents)}</p>
+                        {shareOf(r) === "amigo" && (
+                          <input
+                            className="input col-span-2 py-1.5 text-xs sm:col-span-3"
+                            placeholder="Nome de quem vai pagar (vai para “A receber”)"
+                            list="import-people" autoComplete="off" aria-label="Nome do amigo"
+                            value={friendNames[r.id] ?? ""}
+                            onChange={(e) => setFriendNames((f) => ({ ...f, [r.id]: e.target.value }))}
+                          />
+                        )}
                       </div>
                     </li>
                   );
@@ -313,6 +334,8 @@ function Review({
             </section>
           );
         })}
+
+      <datalist id="import-people">{people.map((p) => <option key={p} value={p} />)}</datalist>
 
       {credits.length > 0 && (
         <details className="card text-sm">
@@ -337,9 +360,12 @@ function Review({
             <p><b>{selected.length}</b> selecionadas · <b className="tabular">{formatBRL(total)}</b> nesta fatura</p>
             <p className="muted text-xs">
               {owed > 0 ? <>{other.name} fica devendo <b className="tabular">{formatBRL(owed)}</b> a {payer.name} neste mês.</> : "Não gera dívida entre vocês."}
+              {friendsTotal > 0 && <> <b className="tabular">{formatBRL(friendsTotal)}</b> vai para “A receber”.</>}
             </p>
           </div>
-          {selected.length > 0 ? (
+          {missingFriend ? (
+            <button type="button" className="btn w-full sm:w-auto" disabled>Informe o nome do amigo</button>
+          ) : selected.length > 0 ? (
             <Submit className="btn w-full sm:w-auto">Importar {selected.length} {selected.length === 1 ? "compra" : "compras"}</Submit>
           ) : (
             <button type="button" className="btn w-full sm:w-auto" disabled>Marque as compras para importar</button>

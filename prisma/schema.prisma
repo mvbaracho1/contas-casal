@@ -23,6 +23,7 @@ model Couple {
   cards       Card[]
   bills       Bill[]
   paidMarks   PaidMark[]
+  receivables Receivable[]
 }
 
 model User {
@@ -43,6 +44,7 @@ model User {
   cards            Card[]
   bills            Bill[]
   resetTokens      PasswordResetToken[]
+  receivables      Receivable[]  @relation("ReceivableCreditor")
 }
 
 /// Uma compra (à vista ou parcelada).
@@ -70,6 +72,8 @@ model Purchase {
   payerSharePct Int?     @default(50)
   cardId        String?
   card          Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  /// Compra feita por um terceiro (amigo) no cartão: o valor a receber dele
+  receivable    Receivable?
   createdAt     DateTime @default(now())
 
   @@index([coupleId, firstMonth])
@@ -176,4 +180,43 @@ model PasswordResetToken {
   createdAt DateTime  @default(now())
 
   @@index([userId])
+}
+
+/// Valor a receber de um terceiro (ex.: amigo que usou o cartão). Só controle:
+/// não entra no acerto entre o casal.
+model Receivable {
+  id               String              @id @default(cuid())
+  coupleId         String
+  couple           Couple              @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  /// Quem do casal recebe o dinheiro (normalmente o titular do cartão)
+  creditorId       String
+  creditor         User                @relation("ReceivableCreditor", fields: [creditorId], references: [id])
+  personName       String
+  description      String
+  totalCents       Int
+  installments     Int                 @default(1)
+  /// Parcela a partir da qual o terceiro deve (as anteriores ficaram fora do app)
+  startInstallment Int                 @default(1)
+  /// Mês (YYYY-MM) em que vence a 1ª parcela
+  firstMonth       String
+  /// Compra ligada (fatura do cartão); os valores acompanham a compra
+  purchaseId       String?             @unique
+  purchase         Purchase?           @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  note             String?
+  createdAt        DateTime            @default(now())
+  payments         ReceivablePayment[]
+
+  @@index([coupleId])
+}
+
+model ReceivablePayment {
+  id           String     @id @default(cuid())
+  receivableId String
+  receivable   Receivable @relation(fields: [receivableId], references: [id], onDelete: Cascade)
+  amountCents  Int
+  paidAt       DateTime
+  note         String?
+  createdAt    DateTime   @default(now())
+
+  @@index([receivableId])
 }

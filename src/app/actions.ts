@@ -8,6 +8,8 @@ import { z } from "zod";
 import { endSession, requireCouple, requireUser, startSession } from "@/lib/auth";
 import { INVITE_RESEND_COOLDOWN_MS, joinByCode, sendCoupleInvite } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
+import { flash } from "@/lib/flash";
+import { syncPurchaseReceivable } from "@/lib/receivable-sync";
 import { addMonths, parseBRL } from "@/lib/ledger";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -36,6 +38,7 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
   await startSession(user.id);
   // Veio de um link de convite: já entra no casal.
   const joined = form.get("invite") ? !(await joinByCode(user.id, form.get("invite"))) : false;
+  await flash(joined ? "Conta criada e você já entrou no casal! 💑" : "Conta criada! Agora é só montar o casal.");
   redirect(joined ? "/" : "/casal");
 }
 
@@ -52,6 +55,7 @@ export async function login(_: FormState, form: FormData): Promise<FormState> {
   await startSession(user.id);
   if (!user.coupleId && form.get("invite")) {
     const joined = !(await joinByCode(user.id, form.get("invite")));
+    if (joined) await flash("Você entrou no casal! 💑");
     redirect(joined ? "/" : "/casal");
   }
   redirect("/");
@@ -84,7 +88,8 @@ export async function createCouple(_: FormState, form: FormData): Promise<FormSt
   });
   const sent = await sendCoupleInvite({ to: parsed.data, inviterName: user.name, coupleName: name, code: couple.inviteCode });
   if (sent) await prisma.couple.update({ where: { id: couple.id }, data: { inviteSentAt: new Date() } });
-  revalidatePath("/casal");
+  await flash(sent ? `Casal criado! Convite enviado para ${parsed.data}` : "Casal criado. Mande o link do convite para seu par.", sent ? "success" : "info");
+  revalidatePath("/", "layout");
   redirect("/casal");
 }
 
@@ -109,9 +114,10 @@ export async function resendInvite(_: FormState, form: FormData): Promise<FormSt
     where: { id: couple.id },
     data: { inviteEmail: parsed.data, ...(sent && { inviteSentAt: new Date() }) },
   });
-  revalidatePath("/casal");
+  revalidatePath("/", "layout");
+  if (sent) await flash(`Convite enviado para ${parsed.data}`);
   return sent
-    ? { ok: `Convite enviado para ${parsed.data}.` }
+    ? {}
     : { error: "Não conseguimos enviar o e-mail agora. Mande o código ou o link abaixo para seu par." };
 }
 
@@ -120,6 +126,7 @@ export async function joinCouple(_: FormState, form: FormData): Promise<FormStat
   if (user.coupleId) return { error: "Você já faz parte de um casal" };
   const error = await joinByCode(user.id, form.get("code"));
   if (error) return { error };
+  await flash("Você entrou no casal! 💑");
   redirect("/");
 }
 
@@ -158,6 +165,10 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     cardId = card.id;
   }
 
+  // Compra de um amigo no cartão: fica toda com quem pagou (não gera dívida no casal)
+  // e o valor vai para "A receber".
+  const friendName = String(form.get("friendName") ?? "").trim().slice(0, 80);
+
   const data = {
     description: d.description,
     category: d.category || null,
@@ -167,17 +178,30 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     firstMonth: d.firstMonth,
     purchaseDate: new Date(`${d.purchaseDate}T12:00:00Z`),
     paidById: d.paidById,
-    payerSharePct: d.payerSharePct === "renda" ? null : d.payerSharePct,
+    payerSharePct: friendName ? 100 : d.payerSharePct === "renda" ? null : d.payerSharePct,
     cardId,
   };
 
-  const id = String(form.get("id") ?? "");
+  let id = String(form.get("id") ?? "");
   if (id) {
+    if (!friendName) {
+      const linked = await prisma.receivable.findFirst({ where: { purchaseId: id, coupleId: couple.id }, include: { _count: { select: { payments: true } } } });
+      if (linked && linked._count.payments > 0) {
+        return { error: `Essa compra tem pagamentos de ${linked.personName} registrados. Exclua o valor em “A receber” antes de mudar a divisão.` };
+      }
+    }
     const res = await prisma.purchase.updateMany({ where: { id, coupleId: couple.id }, data });
     if (res.count === 0) return { error: "Compra não encontrada" };
   } else {
-    await prisma.purchase.create({ data: { ...data, coupleId: couple.id } });
+    id = (await prisma.purchase.create({ data: { ...data, coupleId: couple.id } })).id;
   }
+  const syncError = await syncPurchaseReceivable({ ...data, id, coupleId: couple.id }, friendName);
+  if (syncError) return { error: syncError };
+  await flash(
+    form.get("id")
+      ? "Compra atualizada"
+      : friendName ? `Compra adicionada · ${friendName} vai para “A receber”` : "Compra adicionada",
+  );
   revalidatePath("/", "layout");
   redirect(`/?mes=${addMonths(d.firstMonth, d.installments > 1 ? d.startInstallment - 1 : 0)}`);
 }
@@ -185,6 +209,7 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
 export async function deletePurchase(form: FormData) {
   const { couple } = await requireCouple();
   await prisma.purchase.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
+  await flash("Compra excluída");
   revalidatePath("/", "layout");
   redirect("/compras");
 }
@@ -211,8 +236,9 @@ export async function addSettlement(_: FormState, form: FormData): Promise<FormS
       note: String(form.get("note") ?? "").trim() || null,
     },
   });
-  revalidatePath("/");
-  return { ok: "Transferência registrada" };
+  await flash("Transferência registrada");
+  revalidatePath("/", "layout");
+  return {};
 }
 
 export async function deleteSettlement(form: FormData) {
@@ -220,5 +246,6 @@ export async function deleteSettlement(form: FormData) {
   await prisma.settlement.deleteMany({
     where: { id: String(form.get("id")), coupleId: couple.id },
   });
-  revalidatePath("/");
+  await flash("Transferência excluída");
+  revalidatePath("/", "layout");
 }

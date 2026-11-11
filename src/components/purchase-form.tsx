@@ -20,6 +20,8 @@ export interface PurchaseDefaults {
   paidById: string;
   /** null = proporcional à renda */
   payerSharePct?: number | null;
+  /** compra de um terceiro (amigo) no cartão: nome de quem vai pagar */
+  friendName?: string | null;
   cardId?: string | null;
 }
 
@@ -28,12 +30,15 @@ export function PurchaseForm({
   defaults,
   cards = [],
   incomePct = null,
+  people = [],
 }: {
   members: Member[];
   defaults: PurchaseDefaults;
   cards?: CardOption[];
   /** % da renda de cada um no mês; null se ninguém cadastrou renda */
   incomePct?: Record<string, number> | null;
+  /** nomes já usados em "A receber" (sugestões) */
+  people?: string[];
 }) {
   const [state, action] = useActionState(savePurchase, undefined);
   const [paidById, setPaidById] = useState(defaults.paidById);
@@ -60,6 +65,8 @@ export function PurchaseForm({
     if (card && card.ownerId !== id) setCardId("");
   };
   const [pct, setPct] = useState<number | null>(defaults.payerSharePct === undefined ? 50 : defaults.payerSharePct);
+  // null = não é de terceiro; string = nome do amigo
+  const [friend, setFriend] = useState<string | null>(defaults.friendName ?? null);
   const [total, setTotal] = useState(defaults.total ?? "");
   const [installments, setInstallments] = useState(defaults.installments ?? 1);
   const start = installments > 1 ? Math.min(startInstallment, installments) : 1;
@@ -68,10 +75,10 @@ export function PurchaseForm({
   const payer = members.find((m) => m.id === paidById)!;
   const other = members.find((m) => m.id !== paidById)!;
 
-  const mode = pct === null ? "renda" : pct === 50 ? "split" : pct === 100 ? "payer" : pct === 0 ? "other" : "custom";
+  const mode = friend !== null ? "friend" : pct === null ? "renda" : pct === 50 ? "split" : pct === 100 ? "payer" : pct === 0 ? "other" : "custom";
   const cents = parseBRL(total) ?? 0;
   const firstInstallment = cents && installments > 0 ? splitInstallments(cents, installments)[0] : 0;
-  const otherPct = pct === null ? (incomePct?.[other.id] ?? 50) : 100 - pct;
+  const otherPct = friend !== null ? 0 : pct === null ? (incomePct?.[other.id] ?? 50) : 100 - pct;
   const owedPerInstallment = Math.round((firstInstallment * otherPct) / 100);
 
   const chip = (active: boolean) =>
@@ -156,7 +163,7 @@ export function PurchaseForm({
       <fieldset>
         <legend className="label">De quem é a compra?</legend>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <button type="button" className={`col-span-2 sm:col-span-4 ${chip(mode === "renda")}`} onClick={() => setPct(null)}>
+          <button type="button" className={`col-span-2 sm:col-span-4 ${chip(mode === "renda")}`} onClick={() => { setFriend(null); setPct(null); }}>
             Proporcional à renda
             <span className="block text-xs font-normal text-zinc-500 dark:text-zinc-400">
               {incomePct
@@ -164,12 +171,23 @@ export function PurchaseForm({
                 : "Cadastre a renda em “Nossa renda”. Sem renda, fica 50/50."}
             </span>
           </button>
-          <button type="button" className={chip(mode === "split")} onClick={() => setPct(50)}>Dividida 50/50</button>
-          <button type="button" className={chip(mode === "payer")} onClick={() => setPct(100)}>Só de {payer.name}</button>
-          <button type="button" className={chip(mode === "other")} onClick={() => setPct(0)}>Só de {other.name}</button>
-          <button type="button" className={chip(mode === "custom")} onClick={() => mode !== "custom" && setPct(60)}>Personalizado</button>
+          <button type="button" className={chip(mode === "split")} onClick={() => { setFriend(null); setPct(50); }}>Dividida 50/50</button>
+          <button type="button" className={chip(mode === "payer")} onClick={() => { setFriend(null); setPct(100); }}>Só de {payer.name}</button>
+          <button type="button" className={chip(mode === "other")} onClick={() => { setFriend(null); setPct(0); }}>Só de {other.name}</button>
+          <button type="button" className={chip(mode === "custom")} onClick={() => { setFriend(null); if (mode !== "custom") setPct(60); }}>Personalizado</button>
+          <button type="button" className={`col-span-2 sm:col-span-4 ${chip(mode === "friend")}`} onClick={() => { setFriend(friend ?? ""); setPct(100); }}>
+            🤝 De um amigo (a receber)
+            <span className="block text-xs font-normal text-zinc-500 dark:text-zinc-400">Alguém de fora usou o cartão. Vai para “A receber” e não entra no acerto do casal.</span>
+          </button>
         </div>
-        {mode === "custom" && pct !== null && (
+        {mode === "friend" && (
+          <div className="mt-3">
+            <label className="label" htmlFor="friendName">Nome de quem vai pagar</label>
+            <input className="input" id="friendName" name="friendName" required list="friend-people" autoComplete="off" placeholder="Ex: Pedro" value={friend ?? ""} onChange={(e) => setFriend(e.target.value)} />
+            <datalist id="friend-people">{people.map((p) => <option key={p} value={p} />)}</datalist>
+          </div>
+        )}
+        {mode === "custom" && friend === null && pct !== null && (
           <div className="mt-3 flex items-center gap-3 text-sm">
             <span className="w-28 truncate">{payer.name}: {pct}%</span>
             <input type="range" min={0} max={100} step={5} value={pct} onChange={(e) => setPct(Number(e.target.value))} className="flex-1 accent-blue-600" />
@@ -182,7 +200,13 @@ export function PurchaseForm({
         )}
       </fieldset>
 
-      {cents > 0 && (
+      {cents > 0 && mode === "friend" && (
+        <p className="rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-100">
+          {installments > 1 && `${installments}x de ~${formatBRL(firstInstallment)}. `}
+          <b>{friend || "O amigo"}</b> deve <b>{formatBRL(cents)}</b> a <b>{payer.name}</b>. Acompanhe em “A receber”.
+        </p>
+      )}
+      {cents > 0 && mode !== "friend" && (
         <p className="rounded-xl bg-blue-50 px-3 py-2.5 text-sm text-blue-900 dark:bg-blue-950/60 dark:text-blue-100">
           {installments > 1 && `${installments}x de ~${formatBRL(firstInstallment)}. `}
           {owedPerInstallment > 0 ? (

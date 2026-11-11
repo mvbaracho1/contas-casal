@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { BILL_CATEGORIES, CARD_COLORS } from "@/lib/finance";
+import { flash } from "@/lib/flash";
 import { parseBRL } from "@/lib/ledger";
 import type { FormState } from "./actions";
 
@@ -18,7 +19,9 @@ function checkPeriod(start: string, end?: string) {
   return null;
 }
 
-function done(path: string): never {
+/** Revalida, deixa o toast de sucesso e volta para a lista. */
+async function done(path: string, message: string): Promise<never> {
+  await flash(message);
   revalidatePath("/", "layout");
   redirect(path);
 }
@@ -52,13 +55,13 @@ export async function saveIncome(_: FormState, form: FormData): Promise<FormStat
   } else {
     await prisma.income.create({ data: { ...data, coupleId: couple.id } });
   }
-  done("/renda");
+  return done("/renda", id ? "Renda atualizada" : "Renda adicionada");
 }
 
 export async function deleteIncome(form: FormData) {
   const { couple } = await requireCouple();
   await prisma.income.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
-  done("/renda");
+  await done("/renda", "Renda excluída");
 }
 
 // ---------- Cartões ----------
@@ -94,13 +97,13 @@ export async function saveCard(_: FormState, form: FormData): Promise<FormState>
   } else {
     await prisma.card.create({ data: { ...data, coupleId: couple.id } });
   }
-  done("/cartoes");
+  return done("/cartoes", id ? "Cartão atualizado" : "Cartão adicionado");
 }
 
 export async function deleteCard(form: FormData) {
   const { couple } = await requireCouple();
   await prisma.card.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
-  done("/cartoes");
+  await done("/cartoes", "Cartão excluído");
 }
 
 // ---------- Contas fixas ----------
@@ -144,13 +147,13 @@ export async function saveBill(_: FormState, form: FormData): Promise<FormState>
   } else {
     await prisma.bill.create({ data: { ...data, coupleId: couple.id } });
   }
-  done("/contas");
+  return done("/contas", id ? "Conta fixa atualizada" : "Conta fixa adicionada");
 }
 
 export async function deleteBill(form: FormData) {
   const { couple } = await requireCouple();
   await prisma.bill.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
-  done("/contas");
+  await done("/contas", "Conta fixa excluída");
 }
 
 // ---------- Marcar como pago (conta fixa ou fatura) ----------
@@ -168,12 +171,14 @@ export async function togglePaid(form: FormData) {
     const existing = await prisma.paidMark.findUnique({ where: key });
     if (existing) await prisma.paidMark.delete({ where: { id: existing.id } });
     else await prisma.paidMark.create({ data: { coupleId: couple.id, month: month.data, billId: refId } });
+    await flash(existing ? "Conta desmarcada como paga" : "Conta marcada como paga");
   } else if (kind === "card") {
     if (!(await prisma.card.count({ where: { id: refId, coupleId: couple.id } }))) return;
     const key = { cardId_month: { cardId: refId, month: month.data } };
     const existing = await prisma.paidMark.findUnique({ where: key });
     if (existing) await prisma.paidMark.delete({ where: { id: existing.id } });
     else await prisma.paidMark.create({ data: { coupleId: couple.id, month: month.data, cardId: refId } });
+    await flash(existing ? "Fatura desmarcada como paga" : "Fatura marcada como paga");
   }
-  revalidatePath("/");
+  revalidatePath("/", "layout");
 }
