@@ -1,15 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { IconChevronLeft, IconChevronRight } from "./icons";
 
 export type CarouselSlide = {
   id: string;
   label: string;
-  /** link que seleciona o cartão no painel (atualiza fatura e próximas faturas) */
-  selectHref: string;
   /** link dos detalhes do cartão */
   detailHref: string;
   node: React.ReactNode;
@@ -17,10 +14,17 @@ export type CarouselSlide = {
 
 /**
  * Carrossel com um cartão por vez. Deslizar, usar as setas ou as bolinhas
- * seleciona o cartão visível; tocar no cartão abre os detalhes.
+ * chama `onSelect` com o cartão visível; tocar no cartão abre os detalhes.
  */
-export function CardCarousel({ slides, selectedId }: { slides: CarouselSlide[]; selectedId: string }) {
-  const router = useRouter();
+export function CardCarousel({
+  slides,
+  selectedId,
+  onSelect,
+}: {
+  slides: CarouselSlide[];
+  selectedId: string;
+  onSelect: (id: string) => void;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selected = Math.max(0, slides.findIndex((s) => s.id === selectedId));
@@ -43,7 +47,7 @@ export function CardCarousel({ slides, selectedId }: { slides: CarouselSlide[]; 
       const el = ref.current;
       if (!el) return;
       const i = Math.round(el.scrollLeft / el.clientWidth);
-      if (i !== selected && slides[i]) router.replace(slides[i].selectHref, { scroll: false });
+      if (i !== selected && slides[i]) onSelect(slides[i].id);
     }, 120);
   };
   useEffect(() => () => clearTimeout(timer.current), []);

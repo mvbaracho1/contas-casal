@@ -2,7 +2,7 @@ import Link from "next/link";
 import { deleteSettlement } from "@/app/actions";
 import { togglePaid } from "@/app/actions-finance";
 import { CollapsibleCard } from "@/components/collapsible-card";
-import { CardCarousel } from "@/components/card-carousel";
+import { CardsPanel } from "@/components/cards-panel";
 import { CreditCard } from "@/components/credit-card";
 import { IconAlert, IconArrowRight, IconArrowUpRight, IconCheck, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
@@ -165,11 +165,8 @@ export default async function VisaoGeralPage({
   const shareA = pct(houseShare[memberIds[0]], houseTotal);
 
   // ---------- Cartões ----------
+  // cartão aberto no carrossel (a troca acontece no navegador; a URL só guarda a escolha)
   const selCard = cards.find((c) => c.id === sp.cartao) ?? cards[0];
-  const selInvoices = selCard
-    ? [0, 1, 2].map((n) => ({ ym: addMonths(month, n), ...cardInvoice(purchases, selCard.id, addMonths(month, n)) }))
-    : [];
-  const maxInv = Math.max(...selInvoices.map((x) => x.totalCents), 1);
 
   // ---------- Moradia ----------
   const housingLines = billLines.filter((l) => bills.find((b) => b.id === l.sourceId)?.category === "Moradia");
@@ -347,67 +344,46 @@ export default async function VisaoGeralPage({
 
             {/* Cartões */}
             <section className="card order-4 flex min-w-0 flex-col">
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <h2 className="card-title">Cartões</h2>
-                  <p className="muted mt-3 truncate text-xs">Fatura de {mp.name.toLowerCase()}{selCard && ` · ${selCard.name}`}</p>
-                  <Money cents={selInvoices[0]?.totalCents ?? 0} size="lg" />
-                </div>
-                <Illustration emoji="💳" />
-              </div>
               {cards.length === 0 ? (
-                empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes", "Adicionar cartão")
-              ) : (
                 <>
-                  <Link href={selCard ? `/cartoes/${selCard.id}?mes=${month}` : "/cartoes"} className="btn-outline mt-3 self-start">Ver fatura</Link>
-                  <CardCarousel
-                    selectedId={selCard!.id}
-                    slides={cardInvoices.map((ci) => {
-                      const paid = paidMarks.some((m) => m.cardId === ci.card.id && m.month === month);
-                      return {
-                        id: ci.card.id,
-                        label: ci.card.name,
-                        selectHref: q({ cartao: ci.card.id }),
-                        detailHref: `/cartoes/${ci.card.id}?mes=${month}`,
-                        node: (
-                          <CreditCard
-                            name={ci.card.name}
-                            owner={who(ci.card.ownerId)}
-                            color={ci.card.color}
-                            dueLabel={`${String(ci.card.dueDay).padStart(2, "0")}/${String(mp.m).padStart(2, "0")}`}
-                            limitFreeCents={ci.card.limitCents !== null ? ci.card.limitCents - cardOutstanding(purchases, ci.card.id, month) : null}
-                            status={ci.count === 0 ? "Sem fatura" : paid ? "Paga" : "Aberta"}
-                          />
-                        ),
-                      };
-                    })}
-                  />
-
-                  <p className="mt-5 text-[10px] font-semibold tracking-wider text-zinc-400 uppercase">Próximas faturas</p>
-                  <div className="relative mt-2 grid flex-1 grid-cols-3 gap-2">
-                    {selInvoices.map((u, i) => {
-                      const p = monthParts(u.ym);
-                      const top = 75 - (u.totalCents / maxInv) * 28; // fica abaixo do selo "Atual"
-                      return (
-                        <Link
-                          key={u.ym}
-                          href={`/?mes=${u.ym}${selCard ? `&cartao=${selCard.id}` : ""}`}
-                          className={`relative flex min-h-32 flex-col items-center overflow-hidden rounded-xl border p-2 pt-3 text-center transition ${
-                            i === 0 ? "border-blue-500 bg-white ring-2 ring-blue-500/15 dark:bg-zinc-900" : "border-transparent bg-zinc-50 hover:border-zinc-200 dark:bg-zinc-800/60 dark:hover:border-zinc-700"
-                          }`}
-                        >
-                          <span className="text-xs font-semibold capitalize">{p.short} {String(p.year).slice(2)}</span>
-                          {i === 0 && <span className="pill mt-1 bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">Atual</span>}
-                          {i === 0 && <span className="absolute inset-x-0 bottom-0 bg-gradient-to-b from-blue-100 to-blue-50/40 dark:from-blue-950 dark:to-transparent" style={{ top: `${top}%` }} />}
-                          <span className="absolute left-1/2 z-10 size-2.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-blue-600 bg-white dark:bg-zinc-900" style={{ top: `${top}%` }} />
-                          <span className={`tabular relative mt-auto text-xs font-semibold sm:text-[13px] ${i === 0 ? "text-blue-700 dark:text-blue-300" : "text-zinc-600 dark:text-zinc-300"}`}>
-                            {formatBRL(u.totalCents)}
-                          </span>
-                        </Link>
-                      );
-                    })}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <h2 className="card-title">Cartões</h2>
+                      <p className="muted mt-3 truncate text-xs">Fatura de {mp.name.toLowerCase()}</p>
+                      <Money cents={0} size="lg" />
+                    </div>
+                    <Illustration emoji="💳" />
                   </div>
+                  {empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes", "Adicionar cartão")}
                 </>
+              ) : (
+                <CardsPanel
+                  monthName={mp.name.toLowerCase()}
+                  initialId={selCard!.id}
+                  cards={cardInvoices.map((ci) => {
+                    const paid = paidMarks.some((m) => m.cardId === ci.card.id && m.month === month);
+                    return {
+                      id: ci.card.id,
+                      name: ci.card.name,
+                      detailHref: `/cartoes/${ci.card.id}?mes=${month}`,
+                      invoices: [0, 1, 2].map((n) => {
+                        const ym = addMonths(month, n);
+                        const parts = monthParts(ym);
+                        return { ym, label: `${parts.short} ${String(parts.year).slice(2)}`, totalCents: cardInvoice(purchases, ci.card.id, ym).totalCents };
+                      }),
+                      node: (
+                        <CreditCard
+                          name={ci.card.name}
+                          owner={who(ci.card.ownerId)}
+                          color={ci.card.color}
+                          dueLabel={`${String(ci.card.dueDay).padStart(2, "0")}/${String(mp.m).padStart(2, "0")}`}
+                          limitFreeCents={ci.card.limitCents !== null ? ci.card.limitCents - cardOutstanding(purchases, ci.card.id, month) : null}
+                          status={ci.count === 0 ? "Sem fatura" : paid ? "Paga" : "Aberta"}
+                        />
+                      ),
+                    };
+                  })}
+                />
               )}
             </section>
           </div>
