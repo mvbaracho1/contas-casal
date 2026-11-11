@@ -78,7 +78,17 @@ export default async function CartoesPage() {
                           <input type="hidden" name="id" value={c.id} />
                           <ConfirmButton
                             className="btn-icon size-8 hover:text-red-600" aria-label="Excluir cartão"
-                            title="Excluir cartão?" message={<>O cartão <b>{c.name}</b> será apagado. As compras continuam, mas ficam sem cartão. Para apagar as compras, use “Excluir” na tela do cartão.</>}
+                            title="Excluir cartão?"
+                            message={(() => {
+                              const n = purchases.filter((x) => x.cardId === c.id).length;
+                              return n === 0 ? (
+                                <>O cartão <b>{c.name}</b> será apagado.</>
+                              ) : (
+                                <>
+                                  O cartão <b>{c.name}</b> e <b>{n === 1 ? "a compra dele" : `as ${n} compras dele`}</b>, de todos os meses, serão apagados. Valores “a receber” ligados saem junto, menos os que já têm recebimento. Não dá para desfazer.
+                                </>
+                              );
+                            })()}
                           >
                             <IconTrash width={14} height={14} />
                           </ConfirmButton>

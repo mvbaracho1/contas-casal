@@ -102,10 +102,21 @@ export async function saveCard(_: FormState, form: FormData): Promise<FormState>
   return done("/cartoes", "Cartão atualizado");
 }
 
+/**
+ * Exclui o cartão e todas as compras dele. Valores "a receber" ligados a essas compras
+ * saem junto, exceto os que já têm recebimento (esses ficam, desligados da compra).
+ */
 export async function deleteCard(form: FormData) {
   const { couple } = await requireCouple();
-  await prisma.card.deleteMany({ where: { id: String(form.get("id")), coupleId: couple.id } });
-  await done("/cartoes", "Cartão excluído");
+  const card = await prisma.card.findFirst({ where: { id: String(form.get("id")), coupleId: couple.id } });
+  if (!card) return;
+  const where = { coupleId: couple.id, cardId: card.id };
+  const [, { count }] = await prisma.$transaction([
+    prisma.receivable.deleteMany({ where: { coupleId: couple.id, purchase: where, payments: { none: {} } } }),
+    prisma.purchase.deleteMany({ where }),
+    prisma.card.deleteMany({ where: { id: card.id, coupleId: couple.id } }),
+  ]);
+  await done("/cartoes", count ? `Cartão excluído · ${count} ${count === 1 ? "compra excluída" : "compras excluídas"}` : "Cartão excluído");
 }
 
 const invoiceDeleteSchema = z.object({

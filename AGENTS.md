@@ -66,6 +66,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - Os valores do `Receivable` acompanham a compra. Use `syncPurchaseReceivable()` (`lib/receivable-sync.ts`) sempre que salvar uma compra.
   - Não deixe desligar o amigo de uma compra que já tem pagamentos registrados.
   - Os pagamentos são distribuídos da parcela mais antiga para a mais nova.
+- **Excluir o cartão** (`deleteCard`) apaga também todas as compras dele, com a mesma regra dos `Receivable` abaixo.
 - **Excluir fatura ou compras do cartão** (`deleteCardPurchases`, na tela do cartão). O cartão continua em ambos os casos.
   - "Fatura" apaga as compras com parcela no mês, via `invoicePurchases()` em `lib/finance.ts`. As parceladas saem inteiras. Assinaturas que começaram antes desse mês continuam, para não apagar meses passados.
   - "Tudo" apaga todas as compras do cartão e exige digitar APAGAR.
