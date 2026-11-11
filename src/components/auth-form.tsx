@@ -21,12 +21,14 @@ function Card({ title, subtitle, children }: { title: string; subtitle?: React.R
 
 type Invite = { code: string; inviterName: string; coupleName: string };
 
-export function AuthForm({ mode, googleEnabled, notice, invite, defaultEmail = "" }: {
+export function AuthForm({ mode, googleEnabled, notice, invite, defaultEmail = "", codeRequired = false }: {
   mode: "login" | "cadastro";
   googleEnabled: boolean;
   notice?: string;
   invite?: Invite;
   defaultEmail?: string;
+  /** cadastro sem convite exige o código de acesso de 6 dígitos */
+  codeRequired?: boolean;
 }) {
   const [state, action] = useActionState(mode === "login" ? login : register, undefined);
   // Campos controlados: o React 19 limpa o formulário após cada envio,
@@ -34,7 +36,11 @@ export function AuthForm({ mode, googleEnabled, notice, invite, defaultEmail = "
   const [name, setName] = useState("");
   const [email, setEmail] = useState(defaultEmail);
   const [password, setPassword] = useState("");
+  const [accessCode, setAccessCode] = useState("");
   const isLogin = mode === "login";
+  // Só o primeiro do casal precisa do código; quem vem pelo convite, não.
+  const needsCode = !isLogin && !invite && codeRequired;
+  const codeOk = accessCode.length === 6;
   // Mantém o convite ao trocar entre login e cadastro.
   const qs = invite ? `?${new URLSearchParams({ convite: invite.code, ...(email && { email }) })}` : "";
 
@@ -50,15 +56,34 @@ export function AuthForm({ mode, googleEnabled, notice, invite, defaultEmail = "
       )}
       {notice && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">{notice}</p>}
 
+      {needsCode && (
+        <div>
+          <label className="label" htmlFor="accessCode">Código de acesso</label>
+          <input
+            className="input text-center font-mono text-lg tracking-[0.5em]"
+            id="accessCode" inputMode="numeric" autoComplete="one-time-code" maxLength={6} placeholder="••••••"
+            value={accessCode} onChange={(e) => setAccessCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+          />
+          <p className="muted mt-1 text-[11px]">
+            Código de 6 dígitos para criar o primeiro acesso do casal. Foi convidado pelo seu par? Use o link do convite.
+          </p>
+        </div>
+      )}
+
       {googleEnabled && (
         <>
-          <GoogleButton href={invite ? `/api/auth/google?convite=${invite.code}` : undefined} label={isLogin ? "Entrar com o Google" : "Cadastrar com o Google"} />
+          <GoogleButton
+            href={invite ? `/api/auth/google?convite=${invite.code}` : needsCode ? `/api/auth/google?codigo=${accessCode}` : undefined}
+            disabled={needsCode && !codeOk}
+            label={isLogin ? "Entrar com o Google" : "Cadastrar com o Google"}
+          />
           <Divider text={isLogin ? "ou entre com e-mail" : "ou cadastre com e-mail"} />
         </>
       )}
 
       <form action={action} className="space-y-4">
         {invite && <input type="hidden" name="invite" value={invite.code} />}
+        {needsCode && <input type="hidden" name="accessCode" value={accessCode} />}
         {!isLogin && (
           <div>
             <label className="label" htmlFor="name">Seu nome</label>

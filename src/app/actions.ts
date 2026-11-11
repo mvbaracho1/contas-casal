@@ -6,10 +6,11 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { endSession, requireCouple, requireUser, startSession } from "@/lib/auth";
-import { INVITE_RESEND_COOLDOWN_MS, joinByCode, sendCoupleInvite } from "@/lib/couple-invite";
+import { INVITE_RESEND_COOLDOWN_MS, findInvite, joinByCode, sendCoupleInvite } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
 import { flash } from "@/lib/flash";
 import { syncPurchaseReceivable } from "@/lib/receivable-sync";
+import { checkSignupCode } from "@/lib/signup-code";
 import { addMonths, parseBRL } from "@/lib/ledger";
 
 export type FormState = { error?: string; ok?: string } | undefined;
@@ -28,6 +29,13 @@ export async function register(_: FormState, form: FormData): Promise<FormState>
   const parsed = registerSchema.safeParse(Object.fromEntries(form));
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const { name, email, password } = parsed.data;
+
+  // Quem vem pelo convite do par não precisa do código de acesso; o primeiro do casal precisa.
+  const invite = form.get("invite") ? await findInvite(form.get("invite")) : null;
+  if (!invite || invite.full) {
+    const codeError = await checkSignupCode(form.get("accessCode"));
+    if (codeError) return { error: codeError };
+  }
 
   if (await prisma.user.findUnique({ where: { email } })) {
     return { error: "Já existe uma conta com esse e-mail" };

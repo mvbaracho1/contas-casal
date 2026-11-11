@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { deleteSettlement } from "@/app/actions";
 import { togglePaid } from "@/app/actions-finance";
+import { CollapsibleCard } from "@/components/collapsible-card";
 import { CreditCard } from "@/components/credit-card";
 import { IconAlert, IconArrowRight, IconArrowUpRight, IconCheck, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
@@ -686,9 +687,14 @@ export default async function VisaoGeralPage({
           </section>
 
           {/* Compras do mês */}
-          <section className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${lines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}>
-            <div className="flex items-start justify-between gap-3">
-              <div>
+          <CollapsibleCard
+            storageKey="cc:compras-do-mes"
+            label="compras do mês"
+            className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${lines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}
+            collapsedClassName="card order-8 flex min-w-0 flex-col self-start md:col-span-2 xl:col-span-1"
+            aside={<Illustration emoji="🧾" />}
+            header={
+              <>
                 <h2 className="card-title">Compras do mês <span className="muted font-normal">· {purchaseLines.length}</span></h2>
                 <div className="mt-2"><Money cents={sum(lines.map((l) => l.amountCents))} size="lg" /></div>
                 <p className="muted mt-0.5 text-xs">{filterId ? `pagas por ${who(filterId).toLowerCase()}` : "parcelas das compras do casal"}</p>
@@ -700,9 +706,9 @@ export default async function VisaoGeralPage({
                     </a>
                   ) : null;
                 })()}
-              </div>
-              <Illustration emoji="🧾" />
-            </div>
+              </>
+            }
+          >
             <div className="mt-4 grid grid-cols-3 gap-2">
               {[undefined, ...memberIds].map((id) => {
                 const active = filterId === id;
@@ -746,7 +752,7 @@ export default async function VisaoGeralPage({
                 })}
               </ul>
             )}
-          </section>
+          </CollapsibleCard>
         </div>
       </div>
     </>

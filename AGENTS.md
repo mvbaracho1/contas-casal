@@ -36,6 +36,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 |---|---|
 | `src/lib/ledger.ts` | **Lógica pura** de dinheiro: parcelas, divisões, renda e acerto. Sem banco e sem React. Toda regra de cálculo vai aqui, com teste em `ledger.test.ts` |
 | `src/lib/statement.ts` | **Leitor puro** de faturas (texto de PDF, OFX, CSV). Testes em `statement.test.ts` |
+| `src/lib/goals.ts` | **Lógica pura** das metas: progresso, quanto guardar por mês até o prazo, contribuição de cada um. Testes em `goals.test.ts` |
 | `src/lib/receivables.ts` | **Lógica pura** dos valores a receber: parcelas, distribuição dos pagamentos, status e mensagem de cobrança. Testes em `receivables.test.ts` |
 | `src/lib/finance.ts` | Funções puras de apresentação e de cartão (`splitLabel`, `cardInvoice`, cores) |
 | `src/lib/*-data.ts`, `db.ts`, `auth.ts`, `mail.ts`… | Código **só de servidor** (`import "server-only"`) |
@@ -81,6 +82,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
 - **URL pública:** use `appUrl()` (`lib/app-url.ts`). Nunca monte links de e-mail com o cabeçalho `Host`, que pode ser forjado.
 - **Rotas públicas:** quem não está logado só acessa as rotas listadas em `PUBLIC` no `src/middleware.ts`. `OPEN` é a lista de rotas acessíveis com ou sem login, como o link de convite. Toda tela pública nova precisa entrar numa dessas listas.
 - **E-mail:** use `sendMail()` de `lib/mail.ts`. Sem Resend, em desenvolvimento o e-mail aparece no terminal. Em produção, o envio falha e quem chamou trata o erro.
+- **Código de acesso do cadastro (`lib/signup-code.ts`):** toda criação de conta **sem convite válido** passa por `checkSignupCode()`, inclusive no retorno do Google, senão a regra é contornada. Ele limita 10 tentativas erradas por IP a cada 15 minutos. Em produção, sem `SIGNUP_CODE`, o cadastro fica fechado. Nunca coloque o código no código-fonte.
 - **Respostas que não revelam dados:** a recuperação de senha responde igual exista o e-mail ou não. Mantenha esse padrão.
 - **Faturas não saem do servidor:** não envie o conteúdo de faturas para serviços externos, IA inclusive, sem decisão explícita do dono do projeto.
 

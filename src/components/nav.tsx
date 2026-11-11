@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { IconBag, IconCalendar, IconCard, IconGrid, IconMenu, IconPlus, IconReceive, IconUsers, IconWallet } from "./icons";
+import { IconBag, IconCalendar, IconCard, IconGrid, IconMenu, IconPlus, IconReceive, IconTarget, IconUsers, IconWallet } from "./icons";
 
 const MENU = [
   { href: "/", label: "Visão geral", icon: IconGrid },
@@ -10,6 +10,7 @@ const MENU = [
   { href: "/cartoes", label: "Cartões", icon: IconCard },
   { href: "/contas", label: "Contas fixas", icon: IconCalendar },
   { href: "/receber", label: "A receber", icon: IconReceive },
+  { href: "/metas", label: "Metas", icon: IconTarget },
 ];
 const AJUSTES = [
   { href: "/renda", label: "Nossa renda", icon: IconWallet },
@@ -81,7 +82,7 @@ export function BottomNav() {
           {tab("/", "Início", IconGrid)}
           {tab("/compras", "Compras", IconBag)}
           {tab("/contas", "Contas", IconCalendar)}
-          {tab("/mais", "Mais", IconMenu, ["/mais", "/cartoes", "/renda", "/casal", "/receber"])}
+          {tab("/mais", "Mais", IconMenu, ["/mais", "/cartoes", "/renda", "/casal", "/receber", "/metas"])}
         </div>
         <Link
           href="/compras/nova"

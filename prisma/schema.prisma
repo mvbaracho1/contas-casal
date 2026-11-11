@@ -24,6 +24,7 @@ model Couple {
   bills       Bill[]
   paidMarks   PaidMark[]
   receivables Receivable[]
+  goals       Goal[]
 }
 
 model User {
@@ -45,6 +46,7 @@ model User {
   bills            Bill[]
   resetTokens      PasswordResetToken[]
   receivables      Receivable[]  @relation("ReceivableCreditor")
+  goalEntries      GoalEntry[]
 }
 
 /// Uma compra (à vista ou parcelada).
@@ -219,4 +221,46 @@ model ReceivablePayment {
   createdAt    DateTime   @default(now())
 
   @@index([receivableId])
+}
+
+/// Meta do casal (viagem, reserva de emergência…): só controle, não entra no acerto.
+model Goal {
+  id          String      @id @default(cuid())
+  coupleId    String
+  couple      Couple      @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  name        String
+  emoji       String      @default("🎯")
+  targetCents Int
+  /// Mês (YYYY-MM) em que querem atingir a meta; null = sem prazo
+  targetMonth String?
+  note        String?
+  createdAt   DateTime    @default(now())
+  entries     GoalEntry[]
+
+  @@index([coupleId])
+}
+
+/// Aporte (valor positivo) ou retirada (negativo) de uma meta.
+model GoalEntry {
+  id          String   @id @default(cuid())
+  goalId      String
+  goal        Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
+  /// Quem guardou (ou retirou)
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  amountCents Int
+  date        DateTime
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@index([goalId])
+}
+
+/// Tentativa errada do código de acesso do cadastro (limita tentativas por IP).
+model SignupCodeAttempt {
+  id        String   @id @default(cuid())
+  ip        String
+  createdAt DateTime @default(now())
+
+  @@index([ip, createdAt])
 }

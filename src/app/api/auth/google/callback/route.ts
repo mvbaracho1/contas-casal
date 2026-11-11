@@ -4,9 +4,10 @@ import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { appUrl } from "@/lib/app-url";
 import { startSession } from "@/lib/auth";
-import { INVITE_COOKIE, joinByCode } from "@/lib/couple-invite";
+import { findInvite, INVITE_COOKIE, joinByCode } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
 import { GOOGLE_STATE_COOKIE, googleEnabled, googleProfile } from "@/lib/google";
+import { checkSignupCode, SIGNUP_CODE_COOKIE } from "@/lib/signup-code";
 
 function sameState(a: string, b: string) {
   const x = Buffer.from(a);
@@ -22,6 +23,8 @@ export async function GET(req: NextRequest) {
   const jar = await cookies();
   const expected = jar.get(GOOGLE_STATE_COOKIE)?.value;
   const invite = jar.get(INVITE_COOKIE)?.value;
+  const signupCode = jar.get(SIGNUP_CODE_COOKIE)?.value;
+  jar.delete(SIGNUP_CODE_COOKIE);
   jar.delete(GOOGLE_STATE_COOKIE);
   jar.delete(INVITE_COOKIE);
 
@@ -44,6 +47,12 @@ export async function GET(req: NextRequest) {
       // Mesmo e-mail (verificado pelo Google): liga a conta existente ao Google.
       user = await prisma.user.update({ where: { id: byEmail.id }, data: { googleId: profile.sub } });
     } else {
+      // Conta nova: sem convite válido, precisa do código de acesso (primeiro do casal).
+      const inv = invite ? await findInvite(invite) : null;
+      if (!inv || inv.full) {
+        const codeError = await checkSignupCode(signupCode);
+        if (codeError) redirect(`/cadastro?erro=${signupCode ? "google_codigo_invalido" : "google_codigo"}`);
+      }
       user = await prisma.user.create({
         data: { name: profile.name || profile.email.split("@")[0], email: profile.email, googleId: profile.sub },
       });

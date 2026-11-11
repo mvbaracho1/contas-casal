@@ -11,7 +11,7 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
 ## Funcionalidades
 
 - **Contas e casal**
-  - Cadastro com e-mail e senha ou com o Google.
+  - Cadastro com e-mail e senha ou com o Google. O primeiro do casal precisa de um **código de acesso** de 6 dígitos (`SIGNUP_CODE`); o par entra pelo convite, sem código.
   - Recuperação de senha por e-mail.
   - Quem cria o casal informa o e-mail do par e o app envia um **convite** com link. Também dá para entrar com o código de 6 letras.
 - **Compras**
@@ -37,6 +37,11 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
   - Para cobrar, há o botão **"Cobrar no WhatsApp"** (um link `wa.me`, gratuito, que só abre o WhatsApp com a mensagem pronta) e o botão "Copiar mensagem".
   - A visão geral avisa quando há valor vencido.
   - É só controle: não entra no saldo nem no acerto do casal.
+- **Metas do casal**
+  - Viagem, reserva de emergência, casa, carro…: valor-alvo, prazo opcional e emoji. Há modelos prontos.
+  - Aportes e retiradas registrando quem guardou. O app mostra o progresso, quanto falta e **quanto guardar por mês** para cumprir o prazo.
+  - Na reserva de emergência, o app sugere um valor de 6 meses das contas fixas do casal.
+  - É só controle: não entra no saldo nem no acerto.
 - **Visão geral do mês**
   - Saldo previsto, contas a pagar, faturas dos cartões, moradia e compras do mês.
   - **Acerto:** quem envia quanto para quem. Depois do Pix, registre a transferência e o mês fica zerado. Pendências de meses anteriores aparecem no acerto.
@@ -80,6 +85,7 @@ Sem o Resend configurado, os e-mails de convite e de recuperação de senha **ap
 | `DATABASE_URL_UNPOOLED` | sim | Conexão direta, usada pelas migrações |
 | `AUTH_SECRET` | sim | Assina o cookie de sessão. Precisa ter 32 caracteres ou mais: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"` |
 | `APP_URL` | recomendada | URL pública (`https://www.contasdocasal.com`), usada nos links de e-mail e no retorno do Google |
+| `SIGNUP_CODE` | sim (produção) | Código de acesso de 6 dígitos exigido para criar a conta do **primeiro** usuário do casal. Quem entra pelo link de convite não precisa |
 | `RESEND_API_KEY` | para e-mails | Chave do [Resend](https://resend.com) |
 | `EMAIL_FROM` | para e-mails | Remetente de um domínio verificado no Resend. Ex.: `Contas do Casal <nao-responda@contasdocasal.com>` |
 | `GOOGLE_CLIENT_ID` | para o Google | ID do cliente OAuth. O botão do Google só aparece quando estiver definido |
@@ -126,6 +132,7 @@ src/components/         componentes de UI e formulários
 src/lib/ledger.ts       cálculo das parcelas, divisões e acertos (puro, testado)
 src/lib/statement.ts    leitor de faturas PDF/OFX/CSV (puro, testado)
 src/lib/receivables.ts  parcelas, pagamentos e cobrança dos valores a receber (puro, testado)
+src/lib/goals.ts        progresso das metas e quanto guardar por mês (puro, testado)
 src/middleware.ts       protege as rotas que exigem login
 ```
 

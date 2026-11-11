@@ -30,11 +30,12 @@ export function PasswordInput(props: React.InputHTMLAttributes<HTMLInputElement>
 }
 
 /** Botão "Continuar com o Google" (link comum: o fluxo é feito no servidor). */
-export function GoogleButton({ label = "Continuar com o Google", href = "/api/auth/google" }: { label?: string; href?: string }) {
+export function GoogleButton({ label = "Continuar com o Google", href = "/api/auth/google", disabled = false }: { label?: string; href?: string; disabled?: boolean }) {
   return (
     <a
-      href={href}
-      className="flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+      href={disabled ? undefined : href}
+      aria-disabled={disabled || undefined}
+      className={`flex w-full items-center justify-center gap-3 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-semibold text-zinc-800 shadow-sm transition hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800 ${disabled ? "pointer-events-none cursor-not-allowed opacity-50" : ""}`}
     >
       <svg viewBox="0 0 48 48" width={18} height={18} aria-hidden>
         <path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z" />

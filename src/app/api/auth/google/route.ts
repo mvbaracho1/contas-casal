@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import type { NextRequest } from "next/server";
 import { appUrl } from "@/lib/app-url";
 import { INVITE_COOKIE, normalizeInviteCode } from "@/lib/couple-invite";
+import { normalizeSignupCode, SIGNUP_CODE_COOKIE } from "@/lib/signup-code";
 import { GOOGLE_STATE_COOKIE, googleAuthUrl, googleEnabled } from "@/lib/google";
 
 // Início do login com Google: gera o "state" anti-CSRF e manda para o Google.
@@ -22,5 +23,9 @@ export async function GET(req: NextRequest) {
   const invite = normalizeInviteCode(req.nextUrl.searchParams.get("convite"));
   if (invite) jar.set(INVITE_COOKIE, invite, opts);
   else jar.delete(INVITE_COOKIE);
+  // Código de acesso (cadastro do primeiro do casal): conferido na volta, só se for criar conta.
+  const signupCode = normalizeSignupCode(req.nextUrl.searchParams.get("codigo"));
+  if (signupCode) jar.set(SIGNUP_CODE_COOKIE, signupCode, opts);
+  else jar.delete(SIGNUP_CODE_COOKIE);
   redirect(googleAuthUrl(`${base}/api/auth/google/callback`, state));
 }
