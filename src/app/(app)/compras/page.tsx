@@ -3,14 +3,9 @@ import { PageHeader } from "@/components/page-header";
 import { Avatar, pct } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { splitLabel } from "@/lib/finance";
 import { addMonths, currentYm, formatBRL, formatYm, ymToIndex } from "@/lib/ledger";
 
-function shareLabel(p: number, payer: string, other: string) {
-  if (p === 50) return "Dividida 50/50";
-  if (p === 100) return `Só de ${payer}`;
-  if (p === 0) return `Só de ${other}`;
-  return `${payer} ${p}% · ${other} ${100 - p}%`;
-}
 
 export default async function ComprasPage({ searchParams }: { searchParams: Promise<{ filtro?: string }> }) {
   const { couple, names, memberIds } = await requireCouple();
@@ -39,13 +34,19 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
             <Link href="/compras" className={seg(filtro !== "todas")}>Em aberto</Link>
             <Link href="/compras?filtro=todas" className={seg(filtro === "todas")}>Todas</Link>
           </div>
-          <Link href="/compras/nova" className="btn sm:hidden">+ Nova</Link>
+          <div className="flex gap-2">
+            <Link href="/compras/importar" className="btn-outline py-2 text-sm">📄 Importar fatura</Link>
+            <Link href="/compras/nova" className="btn sm:hidden">+ Nova</Link>
+          </div>
         </div>
 
         {visible.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-zinc-200 p-8 text-center dark:border-zinc-700">
             <p className="muted text-sm">Nenhuma compra por aqui ainda.</p>
-            <Link href="/compras/nova" className="btn mt-3">Adicionar compra</Link>
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              <Link href="/compras/nova" className="btn">Adicionar compra</Link>
+              <Link href="/compras/importar" className="btn-outline py-2 text-sm">Importar fatura</Link>
+            </div>
           </div>
         ) : (
           <ul className="mt-3 divide-y divide-zinc-100 dark:divide-zinc-800">
@@ -68,7 +69,7 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
                         )}
                       </p>
                       <p className="muted truncate text-xs">
-                        Pago por {names[p.paidById]} · {shareLabel(p.payerSharePct, names[p.paidById], names[other])}
+                        Pago por {names[p.paidById]} · {splitLabel(p.payerSharePct, names[p.paidById], names[other])}
                       </p>
                       {p.installments > 1 ? (
                         <div className="mt-1.5 flex items-center gap-2">

@@ -9,8 +9,11 @@ export interface PurchaseLike {
   totalCents: number;
   installments: number;
   firstMonth: Ym;
+  /** Parcelas antes desta ficaram de fora (compra anterior ao app). Padrão 1. */
+  startInstallment?: number;
   paidById: string;
-  payerSharePct: number;
+  /** % de quem pagou; null = proporcional à renda do casal no mês */
+  payerSharePct: number | null;
 }
 
 export interface SettlementLike {
@@ -87,11 +90,25 @@ export function splitInstallments(totalCents: number, n: number): number[] {
   return Array.from({ length: n }, (_, i) => base + (i < rest ? 1 : 0));
 }
 
-export function installmentLine(p: PurchaseLike, month: Ym): InstallmentLine | null {
+/** Renda do mês, para dividir "proporcional à renda" (sem ela, fica 50/50). */
+export interface IncomeContext {
+  income: Record<string, number>;
+  memberIds: [string, string];
+}
+
+/** % que cabe a quem NÃO pagou. */
+function otherPct(paidById: string, payerSharePct: number | null, ctx?: IncomeContext) {
+  if (payerSharePct !== null) return 100 - payerSharePct;
+  if (!ctx) return 50;
+  const other = paidById === ctx.memberIds[0] ? ctx.memberIds[1] : ctx.memberIds[0];
+  return incomeSharePct(ctx.income, other);
+}
+
+export function installmentLine(p: PurchaseLike, month: Ym, ctx?: IncomeContext): InstallmentLine | null {
   const k = ymToIndex(month) - ymToIndex(p.firstMonth);
-  if (k < 0 || k >= p.installments) return null;
+  if (k < 0 || k >= p.installments || k < (p.startInstallment ?? 1) - 1) return null;
   const amountCents = splitInstallments(p.totalCents, p.installments)[k];
-  const otherShareCents = Math.round((amountCents * (100 - p.payerSharePct)) / 100);
+  const otherShareCents = Math.round((amountCents * otherPct(p.paidById, p.payerSharePct, ctx)) / 100);
   return {
     kind: "purchase",
     sourceId: p.id,
@@ -106,9 +123,9 @@ export function installmentLine(p: PurchaseLike, month: Ym): InstallmentLine | n
   };
 }
 
-export function linesForMonth(purchases: PurchaseLike[], month: Ym): InstallmentLine[] {
+export function linesForMonth(purchases: PurchaseLike[], month: Ym, ctx?: IncomeContext): InstallmentLine[] {
   return purchases
-    .map((p) => installmentLine(p, month))
+    .map((p) => installmentLine(p, month, ctx))
     .filter((l): l is InstallmentLine => l !== null);
 }
 
@@ -138,9 +155,7 @@ export function billLine(
   memberIds: [string, string],
 ): InstallmentLine | null {
   if (!activeIn(b, month)) return null;
-  const other = b.paidById === memberIds[0] ? memberIds[1] : memberIds[0];
-  const otherPct = b.payerSharePct === null ? incomeSharePct(income, other) : 100 - b.payerSharePct;
-  const otherShareCents = Math.round((b.amountCents * otherPct) / 100);
+  const otherShareCents = Math.round((b.amountCents * otherPct(b.paidById, b.payerSharePct, { income, memberIds })) / 100);
   return {
     kind: "bill",
     sourceId: b.id,
@@ -167,9 +182,9 @@ export function allLinesForMonth(
   month: Ym,
   memberIds: [string, string],
 ): InstallmentLine[] {
-  const lines = linesForMonth(purchases, month);
-  if (!fixed) return lines;
+  if (!fixed) return linesForMonth(purchases, month);
   const income = incomeByUser(fixed.incomes, month, memberIds);
+  const lines = linesForMonth(purchases, month, { income, memberIds });
   for (const b of fixed.bills) {
     const l = billLine(b, month, income, memberIds);
     if (l) lines.push(l);

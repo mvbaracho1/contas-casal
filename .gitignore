@@ -40,3 +40,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# faturas reais usadas para testar a importação (nunca subir)
+faturas-exemplo/

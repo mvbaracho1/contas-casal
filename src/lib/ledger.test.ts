@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addMonths,
+  linesForMonth,
   invoiceMonthFor,
   parseBRL,
   splitInstallments,
@@ -135,5 +136,32 @@ describe("invoiceMonthFor", () => {
   it("vencimento antes do fechamento joga para o mês seguinte", () => {
     expect(invoiceMonthFor("2026-11-03", 28, 5)).toBe("2026-12");
     expect(invoiceMonthFor("2026-12-29", 28, 5)).toBe("2027-02");
+  });
+});
+
+describe("começar a contar de uma parcela", () => {
+  const p = { id: "x", description: "TV", totalCents: 100000, installments: 10, firstMonth: "2026-09", startInstallment: 3, paidById: "a", payerSharePct: 50 };
+  it("ignora as parcelas anteriores", () => {
+    expect(linesForMonth([p], "2026-09")).toEqual([]);
+    expect(linesForMonth([p], "2026-10")).toEqual([]);
+    expect(linesForMonth([p], "2026-11")[0]).toMatchObject({ number: 3, of: 10, amountCents: 10000 });
+    expect(linesForMonth([p], "2027-06")[0]).toMatchObject({ number: 10 });
+  });
+});
+
+describe("compra proporcional à renda", () => {
+  const p = { id: "r", description: "Sofá", totalCents: 300000, installments: 3, firstMonth: "2026-11", paidById: MARIDO, payerSharePct: null };
+  const incomes = [
+    { userId: MARIDO, amountCents: 600000, startMonth: "2026-01", endMonth: null },
+    { userId: ESPOSA, amountCents: 400000, startMonth: "2026-01", endMonth: null },
+  ];
+  it("divide pela renda do mês (60/40)", () => {
+    const s = summarizeMonth([p], [], "2026-11", members, { bills: [], incomes });
+    expect(s.lines[0]).toMatchObject({ amountCents: 100000, payerShareCents: 60000, otherShareCents: 40000 });
+    expect(s.monthDebt).toEqual({ debtorId: ESPOSA, creditorId: MARIDO, amountCents: 40000 });
+  });
+  it("sem renda cadastrada fica 50/50", () => {
+    const s = summarizeMonth([p], [], "2026-11", members, { bills: [], incomes: [] });
+    expect(s.lines[0].otherShareCents).toBe(50000);
   });
 });

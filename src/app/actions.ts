@@ -8,7 +8,7 @@ import { z } from "zod";
 import { endSession, requireCouple, requireUser, startSession } from "@/lib/auth";
 import { INVITE_RESEND_COOLDOWN_MS, joinByCode, sendCoupleInvite } from "@/lib/couple-invite";
 import { prisma } from "@/lib/db";
-import { parseBRL } from "@/lib/ledger";
+import { addMonths, parseBRL } from "@/lib/ledger";
 
 export type FormState = { error?: string; ok?: string } | undefined;
 
@@ -130,10 +130,12 @@ const purchaseSchema = z.object({
   category: z.string().trim().optional(),
   total: z.string(),
   installments: z.coerce.number().int().min(1).max(72),
+  startInstallment: z.coerce.number().int().min(1).max(72).default(1),
   firstMonth: ym,
   purchaseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   paidById: z.string().min(1),
-  payerSharePct: z.coerce.number().int().min(0).max(100),
+  /** "renda" = proporcional à renda; senão % de quem pagou */
+  payerSharePct: z.union([z.literal("renda"), z.coerce.number().int().min(0).max(100)]),
   cardId: z.string().optional(),
 });
 
@@ -143,6 +145,7 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
   if (!parsed.success) return { error: parsed.error.issues[0].message };
   const d = parsed.data;
 
+  if (d.startInstallment > d.installments) return { error: "A parcela inicial passa do total de parcelas" };
   const totalCents = parseBRL(d.total);
   if (!totalCents) return { error: "Valor inválido" };
   if (!memberIds.includes(d.paidById)) return { error: "Pagador inválido" };
@@ -160,10 +163,11 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     category: d.category || null,
     totalCents,
     installments: d.installments,
+    startInstallment: d.installments > 1 ? d.startInstallment : 1,
     firstMonth: d.firstMonth,
     purchaseDate: new Date(`${d.purchaseDate}T12:00:00Z`),
     paidById: d.paidById,
-    payerSharePct: d.payerSharePct,
+    payerSharePct: d.payerSharePct === "renda" ? null : d.payerSharePct,
     cardId,
   };
 
@@ -175,7 +179,7 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     await prisma.purchase.create({ data: { ...data, coupleId: couple.id } });
   }
   revalidatePath("/", "layout");
-  redirect(`/?mes=${d.firstMonth}`);
+  redirect(`/?mes=${addMonths(d.firstMonth, d.installments > 1 ? d.startInstallment - 1 : 0)}`);
 }
 
 export async function deletePurchase(form: FormData) {

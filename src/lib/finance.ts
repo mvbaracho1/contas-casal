@@ -61,7 +61,7 @@ export function cardOutstanding(purchases: CardPurchase[], cardId: string, fromM
     if (p.cardId !== cardId) continue;
     const start = ymToIndex(p.firstMonth);
     splitInstallments(p.totalCents, p.installments).forEach((c, k) => {
-      if (start + k >= from) total += c;
+      if (start + k >= from && k >= (p.startInstallment ?? 1) - 1) total += c;
     });
   }
   return total;

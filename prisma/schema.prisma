@@ -59,12 +59,15 @@ model Purchase {
   category      String?
   totalCents    Int
   installments  Int      @default(1)
+  /// Parcela a partir da qual a compra entra nas contas (as anteriores foram antes do app)
+  startInstallment Int   @default(1)
   /// Mês da 1ª parcela no formato YYYY-MM (mês da fatura)
   firstMonth    String
   purchaseDate  DateTime
   paidById      String
   paidBy        User     @relation("PaidBy", fields: [paidById], references: [id])
-  payerSharePct Int      @default(50)
+  /// % de quem pagou; null = proporcional à renda do casal (calculado mês a mês)
+  payerSharePct Int?     @default(50)
   cardId        String?
   card          Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
   createdAt     DateTime @default(now())
