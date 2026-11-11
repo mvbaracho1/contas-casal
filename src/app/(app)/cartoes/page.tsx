@@ -64,6 +64,7 @@ export default async function CartoesPage({ searchParams }: { searchParams: Prom
                         </p>
                       </div>
                       <div className="flex shrink-0 gap-1">
+                        <Link href={`/compras/importar?cartao=${c.id}`} className="btn-outline">📄 Importar<span className="hidden sm:inline"> fatura</span></Link>
                         <Link href={`/cartoes?editar=${c.id}`} className="btn-outline">Editar</Link>
                         <form action={deleteCard}>
                           <input type="hidden" name="id" value={c.id} />

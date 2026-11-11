@@ -17,7 +17,9 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
     include: { receivable: { select: { personName: true } } },
   });
   const now = ymToIndex(currentYm());
-  const active = purchases.filter((p) => ymToIndex(p.firstMonth) + p.installments - 1 >= now);
+  const active = purchases.filter((p) =>
+    p.recurring ? !p.endMonth || ymToIndex(p.endMonth) >= now : ymToIndex(p.firstMonth) + p.installments - 1 >= now,
+  );
   const visible = filtro === "todas" ? purchases : active;
 
   const seg = (on: boolean) =>
@@ -73,7 +75,12 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
                         Pago por {names[p.paidById]} ·{" "}
                         {p.receivable ? `🤝 De ${p.receivable.personName} · a receber` : splitLabel(p.payerSharePct, names[p.paidById], names[other])}
                       </p>
-                      {p.installments > 1 ? (
+                      {p.recurring ? (
+                        <p className="text-[11px] text-violet-600 dark:text-violet-400">
+                          🔁 Mensal · desde {formatYm(p.firstMonth).toLowerCase()}
+                          {p.endMonth ? ` até ${formatYm(p.endMonth).toLowerCase()}` : ""}
+                        </p>
+                      ) : p.installments > 1 ? (
                         <div className="mt-1.5 flex items-center gap-2">
                           <span className="h-1.5 w-full max-w-40 overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
                             <span className="block h-full rounded-full bg-blue-600" style={{ width: `${pct(paidSoFar, p.installments)}%` }} />
@@ -87,7 +94,7 @@ export default async function ComprasPage({ searchParams }: { searchParams: Prom
                       )}
                     </div>
                     <div className="shrink-0 text-right">
-                      <p className="tabular text-sm font-semibold">{formatBRL(p.totalCents)}</p>
+                      <p className="tabular text-sm font-semibold">{formatBRL(p.totalCents)}{p.recurring && <span className="text-[11px] font-normal text-zinc-500">/mês</span>}</p>
                       {p.installments > 1 && (
                         <p className="tabular text-[11px] text-zinc-500">{p.installments}x {formatBRL(Math.round(p.totalCents / p.installments))}</p>
                       )}

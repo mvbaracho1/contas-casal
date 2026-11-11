@@ -2,7 +2,7 @@
 // Lógica pura, sem banco: fácil de testar. O resultado sempre passa por uma tela
 // de revisão, então aqui preferimos encontrar demais a deixar passar.
 
-import { addMonths, type Ym } from "./ledger";
+import { addMonths, recurringActive, type Ym } from "./ledger";
 
 export interface StatementItem {
   /** "YYYY-MM-DD" ou null se a data não foi encontrada */
@@ -364,6 +364,8 @@ export interface ExistingPurchase {
   installments: number;
   firstMonth: Ym;
   cardId: string | null;
+  recurring?: boolean;
+  endMonth?: Ym | null;
 }
 
 /** Mês da 1ª parcela de um lançamento da fatura do mês `month`. */
@@ -376,10 +378,19 @@ export function isDuplicate(item: StatementItem, month: Ym, cardId: string | nul
   const n = item.installment?.n ?? 1;
   const first = firstMonthFor(item, month);
   const desc = normDesc(item.description);
-  return existing.some((p) => {
-    if (p.cardId !== cardId || p.installments !== n || p.firstMonth !== first) return false;
-    if (Math.abs(p.totalCents / n - item.amountCents) > 2) return false;
-    const pd = normDesc(p.description);
+  const sameDesc = (d: string) => {
+    const pd = normDesc(d);
     return pd === desc || pd.startsWith(desc.slice(0, 8)) || desc.startsWith(pd.slice(0, 8));
+  };
+  return existing.some((p) => {
+    if (p.cardId !== cardId) return false;
+    if (p.recurring) {
+      // assinatura já cadastrada: aparece de novo em toda fatura enquanto estiver ativa
+      if (item.installment || !recurringActive(p, month)) return false;
+      return Math.abs(p.totalCents - item.amountCents) <= 2 && sameDesc(p.description);
+    }
+    if (p.installments !== n || p.firstMonth !== first) return false;
+    if (Math.abs(p.totalCents / n - item.amountCents) > 2) return false;
+    return sameDesc(p.description);
   });
 }

@@ -57,6 +57,7 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - `firstMonth` é o mês da fatura da **parcela 1**, e `installments` é o total de parcelas.
   - `startInstallment` diz a partir de qual parcela a compra entra nas contas. As anteriores foram pagas antes do app e não geram linhas.
   - Uma linha "3/10" da fatura de dezembro vira `firstMonth = outubro`, `startInstallment = 3`.
+- **Compra recorrente (assinatura):** `recurring = true`, sempre com 1 parcela. O valor cheio se repete todo mês de `firstMonth` até `endMonth` (ou sem fim), via `recurringActive()`. Na importação, uma assinatura já cadastrada é reconhecida em toda fatura em que estiver ativa. No limite do cartão, conta só a cobrança do mês. Compra de amigo não pode ser recorrente.
 - **Divisão (`payerSharePct`)** é o % de quem pagou. `null` significa **proporcional à renda do casal naquele mês**, via `incomeSharePct`. Sem renda cadastrada, fica 50/50. Vale para compras e contas fixas.
 - **Valores a receber (`Receivable`)** são só controle: não entram em `summarizeMonth`, no saldo nem no acerto.
   - Na visão geral, as compras de amigos ficam **à parte**: fora do saldo previsto e de "Compras do mês", mostradas no card "Compras de amigos". Só a fatura do cartão e "Contas a pagar" usam o valor cheio, porque é o que o banco cobra.

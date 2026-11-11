@@ -1,5 +1,5 @@
 // Constantes e cálculos de renda, cartões e contas fixas (puro, sem banco).
-import { linesForMonth, splitInstallments, ymToIndex, type PurchaseLike, type Ym } from "./ledger";
+import { linesForMonth, recurringActive, splitInstallments, ymToIndex, type PurchaseLike, type Ym } from "./ledger";
 
 export const CARD_COLORS = ["black", "orange", "purple", "blue", "green", "red"] as const;
 export type CardColor = (typeof CARD_COLORS)[number];
@@ -59,6 +59,11 @@ export function cardOutstanding(purchases: CardPurchase[], cardId: string, fromM
   let total = 0;
   for (const p of purchases) {
     if (p.cardId !== cardId) continue;
+    // assinatura: só a cobrança do mês conta no limite (não as futuras, que não têm fim)
+    if (p.recurring) {
+      if (recurringActive(p, fromMonth)) total += p.totalCents;
+      continue;
+    }
     const start = ymToIndex(p.firstMonth);
     splitInstallments(p.totalCents, p.installments).forEach((c, k) => {
       if (start + k >= from && k >= (p.startInstallment ?? 1) - 1) total += c;

@@ -65,6 +65,10 @@ model Purchase {
   installments  Int      @default(1)
   /// Parcela a partir da qual a compra entra nas contas (as anteriores foram antes do app)
   startInstallment Int   @default(1)
+  /// Compra recorrente (assinatura): repete todo mês a partir de firstMonth
+  recurring     Boolean  @default(false)
+  /// Último mês da recorrência (YYYY-MM); null = sem fim
+  endMonth      String?
   /// Mês da 1ª parcela no formato YYYY-MM (mês da fatura)
   firstMonth    String
   purchaseDate  DateTime

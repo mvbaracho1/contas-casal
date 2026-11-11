@@ -22,6 +22,7 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
     - só do outro;
     - percentual personalizado;
     - **proporcional à renda** do casal, recalculada mês a mês.
+  - **Assinaturas (recorrentes):** compras à vista que se repetem todo mês na fatura (Netflix, Spotify, academia…), com mês final opcional. Também dá para marcar na importação.
   - Campo **"começar a contar da parcela N"**, para compras antigas que já estavam em andamento.
 - **Importar fatura**
   - Formatos aceitos: PDF (inclusive com senha), OFX ou CSV.

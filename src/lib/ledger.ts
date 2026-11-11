@@ -11,6 +11,9 @@ export interface PurchaseLike {
   firstMonth: Ym;
   /** Parcelas antes desta ficaram de fora (compra anterior ao app). Padrão 1. */
   startInstallment?: number;
+  /** Assinatura: o valor total se repete todo mês de firstMonth até endMonth (ou sem fim) */
+  recurring?: boolean;
+  endMonth?: Ym | null;
   paidById: string;
   /** % de quem pagou; null = proporcional à renda do casal no mês */
   payerSharePct: number | null;
@@ -52,6 +55,8 @@ export interface InstallmentLine {
   category?: string | null;
   number: number; // 1-based
   of: number;
+  /** compra recorrente (assinatura) */
+  recurring?: boolean;
   amountCents: number;
   paidById: string;
   payerShareCents: number;
@@ -104,18 +109,27 @@ function otherPct(paidById: string, payerSharePct: number | null, ctx?: IncomeCo
   return incomeSharePct(ctx.income, other);
 }
 
+/** A compra recorrente está ativa no mês? */
+export function recurringActive(p: Pick<PurchaseLike, "firstMonth" | "endMonth">, month: Ym) {
+  const m = ymToIndex(month);
+  return m >= ymToIndex(p.firstMonth) && (!p.endMonth || m <= ymToIndex(p.endMonth));
+}
+
 export function installmentLine(p: PurchaseLike, month: Ym, ctx?: IncomeContext): InstallmentLine | null {
   const k = ymToIndex(month) - ymToIndex(p.firstMonth);
-  if (k < 0 || k >= p.installments || k < (p.startInstallment ?? 1) - 1) return null;
-  const amountCents = splitInstallments(p.totalCents, p.installments)[k];
+  if (p.recurring) {
+    if (!recurringActive(p, month)) return null;
+  } else if (k < 0 || k >= p.installments || k < (p.startInstallment ?? 1) - 1) return null;
+  const amountCents = p.recurring ? p.totalCents : splitInstallments(p.totalCents, p.installments)[k];
   const otherShareCents = Math.round((amountCents * otherPct(p.paidById, p.payerSharePct, ctx)) / 100);
   return {
     kind: "purchase",
     sourceId: p.id,
     description: p.description,
     category: p.category,
-    number: k + 1,
-    of: p.installments,
+    number: p.recurring ? 1 : k + 1,
+    of: p.recurring ? 1 : p.installments,
+    recurring: p.recurring || undefined,
     amountCents,
     paidById: p.paidById,
     payerShareCents: amountCents - otherShareCents,

@@ -49,6 +49,8 @@ export default async function EditarCompraPage({ params }: { params: Promise<{ i
           paidById: p.paidById,
           payerSharePct: p.payerSharePct,
           friendName: p.receivable?.personName ?? null,
+          recurring: p.recurring,
+          endMonth: p.endMonth,
           cardId: p.cardId,
         }}
       />

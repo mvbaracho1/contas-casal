@@ -83,6 +83,8 @@ const importSchema = z.object({
         category: z.string().trim().max(60).nullable().optional(),
         /** compra de um amigo no cartão: vira um valor "a receber" */
         friendName: z.string().trim().max(80).optional(),
+        /** assinatura: repete todo mês a partir desta fatura (só à vista) */
+        recurring: z.boolean().optional(),
       }).refine((i) => i.k <= i.n, "Parcela inválida"),
     )
     .min(1, "Selecione ao menos um lançamento")
@@ -124,6 +126,8 @@ export async function importStatement(_: { error?: string } | undefined, form: F
       // compra de amigo fica toda com o titular (não gera dívida no casal)
       payerSharePct: friendName ? 100 : i.payerSharePct,
       cardId: d.cardId,
+      // assinatura (à vista, não de amigo): repete todo mês a partir desta fatura
+      recurring: Boolean(i.recurring && i.n === 1 && !friendName),
     };
     return { purchase, friendName };
   });
@@ -154,9 +158,11 @@ export async function importStatement(_: { error?: string } | undefined, form: F
       ),
   ]);
   const friends = rows.filter((r) => r.friendName).length;
+  const subs = rows.filter((r) => r.purchase.recurring).length;
   await flash(
     `${d.items.length} ${d.items.length === 1 ? "compra importada" : "compras importadas"}` +
-      (friends ? ` · ${friends} para “A receber”` : ""),
+      (friends ? ` · ${friends} para “A receber”` : "") +
+      (subs ? ` · ${subs} ${subs === 1 ? "recorrente" : "recorrentes"}` : ""),
   );
   revalidatePath("/", "layout");
   redirect(`/?mes=${d.month}`);

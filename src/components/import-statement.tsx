@@ -18,6 +18,7 @@ export function ImportStatement({
   defaultMonth,
   incomePct,
   people = [],
+  defaultCardId,
 }: {
   members: Member[];
   meId: string;
@@ -26,10 +27,13 @@ export function ImportStatement({
   defaultMonth: string;
   incomePct: Record<string, number> | null;
   people?: string[];
+  /** cartão já escolhido (vindo da página de cartões) */
+  defaultCardId?: string;
 }) {
+  const initialCard = cards.find((c) => c.id === defaultCardId) ?? cards[0];
   const [readState, readAction] = useActionState(readStatement, undefined);
-  const [cardId, setCardId] = useState(cards[0]?.id ?? "");
-  const [payerId, setPayerId] = useState(cards[0]?.ownerId ?? meId);
+  const [cardId, setCardId] = useState(initialCard?.id ?? "");
+  const [payerId, setPayerId] = useState(initialCard?.ownerId ?? meId);
   const [file, setFile] = useState<File | null>(null);
   const [password, setPassword] = useState("");
   const [localError, setLocalError] = useState("");
@@ -173,6 +177,9 @@ function Review({
   const [defaultShare, setDefaultShare] = useState("100");
   // compras de amigos no cartão: nome de quem vai pagar (vai para "A receber")
   const [friendNames, setFriendNames] = useState<Record<number, string>>({});
+  // compras à vista marcadas como assinatura (repetem todo mês na fatura)
+  const [recurring, setRecurring] = useState<Record<number, boolean>>({});
+  const isRecurring = (r: Row) => !r.installment && shareOf(r) !== "amigo" && Boolean(recurring[r.id]);
 
   const payer = members.find((m) => m.id === payerId)!;
   const other = members.find((m) => m.id !== payerId)!;
@@ -197,6 +204,7 @@ function Review({
   const fromFriends = selected.filter((r) => shareOf(r) === "amigo");
   const missingFriend = fromFriends.some((r) => !friendOf(r));
   const friendsTotal = fromFriends.reduce((a, r) => a + r.amountCents, 0);
+  const recurringCount = selected.filter(isRecurring).length;
 
   const payload = JSON.stringify({
     cardId,
@@ -210,6 +218,7 @@ function Review({
       n: r.installment?.n ?? 1,
       payerSharePct: shareOf(r) === "amigo" ? 100 : shareOf(r) === "renda" ? null : Number(shareOf(r)),
       friendName: shareOf(r) === "amigo" ? friendOf(r) : undefined,
+      recurring: isRecurring(r) || undefined,
     })),
   });
 
@@ -300,6 +309,21 @@ function Review({
                           />
                           <p className="flex flex-wrap items-center gap-x-2 gap-y-1 px-1.5 text-[11px] text-zinc-500">
                             {r.date && <span>{r.date.split("-").reverse().slice(0, 2).join("/")}</span>}
+                            {!r.installment && shareOf(r) !== "amigo" && (
+                              <label
+                                className={`inline-flex cursor-pointer items-center gap-1 rounded-full px-2 py-0.5 transition ${
+                                  recurring[r.id] ? "bg-violet-100 font-semibold text-violet-700 dark:bg-violet-950 dark:text-violet-300" : "bg-zinc-100 hover:bg-zinc-200 dark:bg-zinc-800 dark:hover:bg-zinc-700"
+                                }`}
+                                title="Assinatura: a compra se repete todo mês nesta fatura"
+                              >
+                                <input
+                                  type="checkbox" className="size-3 accent-violet-600"
+                                  checked={Boolean(recurring[r.id])}
+                                  onChange={(e) => setRecurring((x) => ({ ...x, [r.id]: e.target.checked }))}
+                                />
+                                🔁 Recorrente
+                              </label>
+                            )}
                             {r.installment && (
                               <span className="pill bg-blue-50 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
                                 parcela {r.installment.k}/{r.installment.n}
@@ -361,6 +385,7 @@ function Review({
             <p className="muted text-xs">
               {owed > 0 ? <>{other.name} fica devendo <b className="tabular">{formatBRL(owed)}</b> a {payer.name} neste mês.</> : "Não gera dívida entre vocês."}
               {friendsTotal > 0 && <> <b className="tabular">{formatBRL(friendsTotal)}</b> vai para “A receber”.</>}
+              {recurringCount > 0 && <> {recurringCount} {recurringCount === 1 ? "assinatura vai" : "assinaturas vão"} se repetir todo mês.</>}
             </p>
           </div>
           {missingFriend ? (

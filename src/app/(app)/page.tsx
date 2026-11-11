@@ -740,6 +740,7 @@ export default async function VisaoGeralPage({
                           <span className="flex items-center gap-1.5">
                             <span className="truncate text-[13px] font-medium">{l.description}</span>
                             {l.of > 1 && <span className="pill shrink-0 bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{l.number}/{l.of}</span>}
+                            {l.recurring && <span className="pill shrink-0 bg-violet-50 text-violet-700 dark:bg-violet-950 dark:text-violet-300">🔁 mensal</span>}
                           </span>
                           <span className="muted block truncate text-[11px]">
 {l.otherShareCents > 0 ? `${who(other)} deve ${formatBRL(l.otherShareCents)}` : `Só de ${who(l.paidById).toLowerCase()}`}

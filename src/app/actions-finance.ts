@@ -95,9 +95,11 @@ export async function saveCard(_: FormState, form: FormData): Promise<FormState>
     // Se o dono mudou, as compras do cartão passam a ser pagas pelo novo dono.
     await prisma.purchase.updateMany({ where: { cardId: id, coupleId: couple.id }, data: { paidById: d.ownerId } });
   } else {
-    await prisma.card.create({ data: { ...data, coupleId: couple.id } });
+    const created = await prisma.card.create({ data: { ...data, coupleId: couple.id } });
+    // Cartão novo: já oferece importar a fatura dele
+    return done(`/compras/importar?cartao=${created.id}&novo=1`, `Cartão ${d.name} adicionado`);
   }
-  return done("/cartoes", id ? "Cartão atualizado" : "Cartão adicionado");
+  return done("/cartoes", "Cartão atualizado");
 }
 
 export async function deleteCard(form: FormData) {

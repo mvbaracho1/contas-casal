@@ -165,3 +165,17 @@ describe("compra proporcional à renda", () => {
     expect(s.lines[0].otherShareCents).toBe(50000);
   });
 });
+
+describe("compra recorrente (assinatura)", () => {
+  const netflix = { id: "n", description: "Netflix", totalCents: 5590, installments: 1, firstMonth: "2026-11", recurring: true, endMonth: null, paidById: MARIDO, payerSharePct: 50 };
+  it("repete o valor cheio todo mês a partir do início", () => {
+    expect(linesForMonth([netflix], "2026-10")).toEqual([]);
+    expect(linesForMonth([netflix], "2026-11")[0]).toMatchObject({ amountCents: 5590, otherShareCents: 2795, recurring: true });
+    expect(linesForMonth([netflix], "2027-08")[0].amountCents).toBe(5590);
+  });
+  it("para depois do mês final", () => {
+    const cancelada = { ...netflix, endMonth: "2027-01" };
+    expect(linesForMonth([cancelada], "2027-01")).toHaveLength(1);
+    expect(linesForMonth([cancelada], "2027-02")).toEqual([]);
+  });
+});

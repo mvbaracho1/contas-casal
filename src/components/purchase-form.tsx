@@ -23,6 +23,9 @@ export interface PurchaseDefaults {
   /** compra de um terceiro (amigo) no cartão: nome de quem vai pagar */
   friendName?: string | null;
   cardId?: string | null;
+  /** assinatura: repete todo mês */
+  recurring?: boolean;
+  endMonth?: string | null;
 }
 
 export function PurchaseForm({
@@ -67,9 +70,14 @@ export function PurchaseForm({
   const [pct, setPct] = useState<number | null>(defaults.payerSharePct === undefined ? 50 : defaults.payerSharePct);
   // null = não é de terceiro; string = nome do amigo
   const [friend, setFriend] = useState<string | null>(defaults.friendName ?? null);
+  const [recurringOn, setRecurringOn] = useState(defaults.recurring ?? false);
+  const [endMonth, setEndMonth] = useState(defaults.endMonth ?? "");
   const [total, setTotal] = useState(defaults.total ?? "");
   const [installments, setInstallments] = useState(defaults.installments ?? 1);
   const start = installments > 1 ? Math.min(startInstallment, installments) : 1;
+  // assinatura só faz sentido à vista e quando não é compra de amigo
+  const canRecur = installments === 1 && friend === null;
+  const isRecurring = canRecur && recurringOn;
   const firstMonth = /^\d{4}-\d{2}$/.test(startMonth) ? addMonths(startMonth, -(start - 1)) : startMonth;
 
   const payer = members.find((m) => m.id === paidById)!;
@@ -110,7 +118,7 @@ export function PurchaseForm({
           />
         </div>
         <div>
-          <label className="label" htmlFor="startMonth">{start > 1 ? `Fatura da parcela ${start}` : "Mês da 1ª parcela (fatura)"}</label>
+          <label className="label" htmlFor="startMonth">{isRecurring ? "Primeira fatura" : start > 1 ? `Fatura da parcela ${start}` : "Mês da 1ª parcela (fatura)"}</label>
           <input className="input" id="startMonth" type="month" required value={startMonth} onChange={(e) => setStartMonth(e.target.value)} />
           <input type="hidden" name="firstMonth" value={firstMonth} />
           {card && <p className="mt-1 text-[11px] text-zinc-500">Sugerido pelo fechamento (dia {card.closingDay}) do {card.name}.</p>}
@@ -129,6 +137,29 @@ export function PurchaseForm({
             </p>
           </div>
         )}
+        {canRecur && (
+          <div className="sm:col-span-2">
+            <label
+              className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2.5 text-sm transition ${
+                recurringOn ? "border-violet-400 bg-violet-50 dark:border-violet-700 dark:bg-violet-950/50" : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
+              }`}
+            >
+              <input type="checkbox" className="size-4 accent-violet-600" checked={recurringOn} onChange={(e) => setRecurringOn(e.target.checked)} />
+              <span className="min-w-0 flex-1">
+                <span className="font-medium">🔁 Repete todo mês (assinatura)</span>
+                <span className="muted block text-xs">Netflix, Spotify, academia… entra em toda fatura até você cancelar.</span>
+              </span>
+            </label>
+            {recurringOn && (
+              <div className="mt-2">
+                <label className="label" htmlFor="endMonth">Até (opcional, quando cancelar)</label>
+                <input className="input" id="endMonth" type="month" value={endMonth} min={startMonth} onChange={(e) => setEndMonth(e.target.value)} />
+              </div>
+            )}
+          </div>
+        )}
+        <input type="hidden" name="recurring" value={isRecurring ? "1" : ""} />
+        <input type="hidden" name="endMonth" value={isRecurring ? endMonth : ""} />
         {cards.length > 0 && (
           <div className="sm:col-span-2">
             <label className="label" htmlFor="cardId">Cartão (opcional)</label>
@@ -212,7 +243,7 @@ export function PurchaseForm({
           {owedPerInstallment > 0 ? (
             <>
               <b>{other.name}</b> deve <b>{formatBRL(owedPerInstallment)}</b>
-              {installments > 1 && " por mês"} a <b>{payer.name}</b>.
+              {(installments > 1 || isRecurring) && " por mês"} a <b>{payer.name}</b>.
             </>
           ) : (
             <>Não gera dívida: é toda de {payer.name}.</>

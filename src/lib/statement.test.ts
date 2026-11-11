@@ -133,3 +133,18 @@ describe("duplicadas", () => {
     expect(isDuplicate(item, "2026-11", "c2", existing)).toBe(false);
   });
 });
+
+describe("assinatura já cadastrada", () => {
+  const item = { date: "2026-12-15", description: "Netflix.com", amountCents: 5590, installment: null, kind: "charge" as const };
+  const sub = { description: "Netflix.com", totalCents: 5590, installments: 1, firstMonth: "2026-11", cardId: "c1", recurring: true, endMonth: null };
+  it("é reconhecida nas faturas seguintes", () => {
+    expect(isDuplicate(item, "2026-12", "c1", [sub])).toBe(true);
+    expect(isDuplicate(item, "2027-05", "c1", [sub])).toBe(true);
+  });
+  it("não antes do início, depois do fim, em outro cartão ou com outro valor", () => {
+    expect(isDuplicate(item, "2026-10", "c1", [sub])).toBe(false);
+    expect(isDuplicate(item, "2027-02", "c1", [{ ...sub, endMonth: "2027-01" }])).toBe(false);
+    expect(isDuplicate(item, "2026-12", "c2", [sub])).toBe(false);
+    expect(isDuplicate({ ...item, amountCents: 6490 }, "2026-12", "c1", [sub])).toBe(false);
+  });
+});

@@ -149,6 +149,8 @@ const purchaseSchema = z.object({
   firstMonth: ym,
   purchaseDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   paidById: z.string().min(1),
+  recurring: z.literal("1").optional().or(z.literal("")),
+  endMonth: z.union([ym, z.literal("")]).optional(),
   /** "renda" = proporcional à renda; senão % de quem pagou */
   payerSharePct: z.union([z.literal("renda"), z.coerce.number().int().min(0).max(100)]),
   cardId: z.string().optional(),
@@ -176,6 +178,10 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
   // Compra de um amigo no cartão: fica toda com quem pagou (não gera dívida no casal)
   // e o valor vai para "A receber".
   const friendName = String(form.get("friendName") ?? "").trim().slice(0, 80);
+  const recurring = d.recurring === "1";
+  if (recurring && d.installments !== 1) return { error: "Assinatura é sempre à vista (1 parcela)" };
+  if (recurring && friendName) return { error: "Compra de amigo não pode ser recorrente" };
+  if (recurring && d.endMonth && d.endMonth < d.firstMonth) return { error: "O mês final precisa ser depois do primeiro" };
 
   const data = {
     description: d.description,
@@ -188,6 +194,8 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
     paidById: d.paidById,
     payerSharePct: friendName ? 100 : d.payerSharePct === "renda" ? null : d.payerSharePct,
     cardId,
+    recurring,
+    endMonth: recurring ? d.endMonth || null : null,
   };
 
   let id = String(form.get("id") ?? "");
@@ -208,7 +216,9 @@ export async function savePurchase(_: FormState, form: FormData): Promise<FormSt
   await flash(
     form.get("id")
       ? "Compra atualizada"
-      : friendName ? `Compra adicionada · ${friendName} vai para “A receber”` : "Compra adicionada",
+      : friendName
+        ? `Compra adicionada · ${friendName} vai para “A receber”`
+        : recurring ? "Assinatura adicionada · repete todo mês 🔁" : "Compra adicionada",
   );
   revalidatePath("/", "layout");
   redirect(`/?mes=${addMonths(d.firstMonth, d.installments > 1 ? d.startInstallment - 1 : 0)}`);
