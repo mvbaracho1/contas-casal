@@ -3,7 +3,7 @@ import { deleteSettlement } from "@/app/actions";
 import { cancelDispute } from "@/app/actions-disputes";
 import { DisputeOpen, DisputeResolve, type ProposalOption } from "@/components/dispute-forms";
 import { togglePaid } from "@/app/actions-finance";
-import { CollapsibleCard } from "@/components/collapsible-card";
+import { CollapseBody, CollapseToggle, Collapsible, CollapsibleCard } from "@/components/collapsible-card";
 import { CardsPanel } from "@/components/cards-panel";
 import { ParamLink, ParamView } from "@/components/url-state";
 import { CreditCard } from "@/components/credit-card";
@@ -246,7 +246,11 @@ export default async function VisaoGeralPage({
         {/* ================= Coluna principal ================= */}
         <div className="contents">
           {/* Saldo previsto */}
-          <section className={`card order-1 flex min-w-0 flex-col md:col-span-2 ${payables.length > 2 ? "xl:min-h-[22rem]" : ""}`}>
+                    <Collapsible
+            storageKey="saldo" label="saldo previsto"
+            className={`card order-1 flex min-w-0 flex-col md:col-span-2 ${payables.length > 2 ? "xl:min-h-[22rem]" : ""}`}
+            collapsedClassName="card order-1 flex min-w-0 flex-col self-start md:col-span-2"
+          >
             <div className="flex items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="card-title">Saldo previsto</h2>
@@ -265,7 +269,9 @@ export default async function VisaoGeralPage({
                 </div>
               </div>
               <Illustration emoji="👛" />
+              <CollapseToggle />
             </div>
+            <CollapseBody>
             <div className="h-5 shrink-0" />
 
             <div className="mt-auto flex h-2.5 shrink-0 gap-0.5 overflow-hidden rounded-full bg-zinc-100 pt-0 dark:bg-zinc-800">
@@ -296,11 +302,12 @@ export default async function VisaoGeralPage({
                 </dd>
               </div>
             </dl>
-          </section>
+            </CollapseBody>
+          </Collapsible>
 
           <div className="contents">
             {/* Contas divididas entre o casal */}
-            <section className="card order-3 flex min-w-0 flex-col">
+                        <Collapsible storageKey="divididas" label="contas divididas" className="card order-3 flex min-w-0 flex-col" collapsedClassName="card order-3 flex min-w-0 flex-col self-start">
               <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="card-title">Contas divididas</h2>
@@ -308,7 +315,9 @@ export default async function VisaoGeralPage({
                   <Money cents={houseTotal} size="lg" />
                 </div>
                 <Illustration emoji="⚖️" />
+                <CollapseToggle />
               </div>
+              <CollapseBody>
 
               {houseLines.length === 0 ? (
                 empty(
@@ -372,10 +381,11 @@ export default async function VisaoGeralPage({
                   </div>
                 </>
               )}
-            </section>
+              </CollapseBody>
+            </Collapsible>
 
             {/* Cartões */}
-            <section className="card order-4 flex min-w-0 flex-col">
+            <Collapsible storageKey="cartoes" label="cartões" className="card order-4 flex min-w-0 flex-col" collapsedClassName="card order-4 flex min-w-0 flex-col self-start">
               {cards.length === 0 ? (
                 <>
                   <div className="flex items-start justify-between gap-3">
@@ -385,8 +395,9 @@ export default async function VisaoGeralPage({
                       <Money cents={0} size="lg" />
                     </div>
                     <Illustration emoji="💳" />
+                    <CollapseToggle />
                   </div>
-                  {empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes/novo", "Adicionar cartão")}
+                  <CollapseBody>{empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes/novo", "Adicionar cartão")}</CollapseBody>
                 </>
               ) : (
                 <CardsPanel
@@ -422,12 +433,17 @@ export default async function VisaoGeralPage({
                   })}
                 />
               )}
-            </section>
+            </Collapsible>
           </div>
 
           {/* Acerto do mês */}
-          <section id="acerto" className={`card order-7 flex min-w-0 flex-col gap-4 md:col-span-2 ${purchaseLines.length > 2 ? "xl:min-h-[28rem]" : ""}`}>
-            <div className="flex flex-wrap items-start justify-between gap-4">
+          <Collapsible
+            storageKey="acerto" label="acerto do mês" id="acerto" openOnHash={["#contestacoes"]}
+            className={`card order-7 flex min-w-0 flex-col gap-4 md:col-span-2 ${purchaseLines.length > 2 ? "xl:min-h-[28rem]" : ""}`}
+            collapsedClassName="card order-7 flex min-w-0 flex-col gap-4 self-start md:col-span-2"
+          >
+            <div className="flex items-start gap-3">
+            <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-4">
               <div className="min-w-0">
                 <h2 className="card-title">Acerto do mês</h2>
                 <p className="muted text-xs">Compras + contas fixas, descontando as transferências</p>
@@ -447,6 +463,8 @@ export default async function VisaoGeralPage({
               </div>
               {pending.debtorId && <QuickSettle month={month} fromId={pending.debtorId} amount={centsToInput(pending.amountCents)} />}
             </div>
+            <CollapseToggle />
+            </div>
 
             {waitingMe.length > 0 && (
               <a
@@ -462,6 +480,7 @@ export default async function VisaoGeralPage({
               </a>
             )}
 
+            <CollapseBody>
             {hasOlderPending && (
               <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
                 <IconAlert className="mt-px shrink-0" width={14} height={14} />
@@ -652,12 +671,18 @@ export default async function VisaoGeralPage({
                 />
               </div>
             </details>
-          </section>
+            </CollapseBody>
+          </Collapsible>
         </div>
 
         {/* Compras de amigos: faixa inteira logo abaixo dos cartões */}
-        <section id="amigos" className="card order-6 min-w-0 scroll-mt-4 md:col-span-2 xl:col-span-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
+                <Collapsible
+          storageKey="amigos" label="compras de amigos" id="amigos"
+          className="card order-6 min-w-0 scroll-mt-4 md:col-span-2 xl:col-span-3"
+          collapsedClassName="card order-6 flex min-w-0 scroll-mt-4 flex-col self-start md:col-span-2 xl:col-span-3"
+        >
+          <div className="flex items-start gap-3">
+          <div className="flex min-w-0 flex-1 flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="card-title">Compras de amigos</h2>
               <p className="muted text-xs">O que terceiros devem em {mp.name.toLowerCase()}</p>
@@ -674,6 +699,9 @@ export default async function VisaoGeralPage({
               <Link href={newFriendHref()} className="btn shrink-0 px-3 py-2 text-sm">+ Nova</Link>
             </div>
           </div>
+          <CollapseToggle />
+          </div>
+            <CollapseBody>
 
           {friendGroups.length === 0 ? (
             <div className="mt-3 flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-200 px-4 py-4 text-center text-sm text-zinc-500 dark:border-zinc-700">
@@ -747,12 +775,17 @@ export default async function VisaoGeralPage({
               Total em aberto com amigos (todos os meses): {formatBRL(friendOpenAll)} →
             </Link>
           )}
-        </section>
+            </CollapseBody>
+        </Collapsible>
 
         {/* ================= Coluna lateral ================= */}
         <div className="contents">
           {/* Contas a pagar */}
-          <section className={`card order-2 flex min-w-0 flex-col ${payables.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}>
+                    <Collapsible
+            storageKey="a-pagar" label="contas a pagar"
+            className={`card order-2 flex min-w-0 flex-col ${payables.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}
+            collapsedClassName="card order-2 flex min-w-0 flex-col self-start"
+          >
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="card-title">
@@ -769,7 +802,9 @@ export default async function VisaoGeralPage({
                 </p>
               </div>
               <Illustration emoji="📅" />
+              <CollapseToggle />
             </div>
+            <CollapseBody>
 
             {payables.length === 0 ? (
               empty("Nenhuma conta ou fatura neste mês.", "/contas/nova", "Adicionar conta fixa")
@@ -833,10 +868,11 @@ export default async function VisaoGeralPage({
                 </ul>
               </>
             )}
-          </section>
+            </CollapseBody>
+          </Collapsible>
 
           {/* Moradia */}
-          <section className="card order-5 flex min-w-0 flex-col">
+                    <Collapsible storageKey="moradia" label="moradia" className="card order-5 flex min-w-0 flex-col" collapsedClassName="card order-5 flex min-w-0 flex-col self-start">
             <div className="flex items-start justify-between gap-3">
               <div>
                 <h2 className="card-title">Moradia</h2>
@@ -844,7 +880,9 @@ export default async function VisaoGeralPage({
                 <Money cents={myHousing} size="lg" />
               </div>
               <Illustration emoji="🏡" />
+              <CollapseToggle />
             </div>
+            <CollapseBody>
             {housingLines.length === 0 ? (
               empty("Use a categoria “Moradia” nas contas fixas (aluguel, condomínio, financiamento…).", "/contas/nova", "Adicionar conta")
             ) : (
@@ -887,11 +925,13 @@ export default async function VisaoGeralPage({
                 </ul>
               </>
             )}
-          </section>
+            </CollapseBody>
+          </Collapsible>
 
           {/* Compras do mês */}
           <CollapsibleCard
-            storageKey="cc:compras-do-mes"
+            storageKey="compras-do-mes"
+            more="Mostrar lista"
             label="compras do mês"
             className={`card order-8 flex min-w-0 flex-col md:col-span-2 xl:col-span-1 ${purchaseLines.length > 2 ? "xl:h-0 xl:min-h-full" : ""}`}
             collapsedClassName="card order-8 flex min-w-0 flex-col self-start md:col-span-2 xl:col-span-1"

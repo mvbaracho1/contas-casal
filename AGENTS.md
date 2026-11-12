@@ -122,6 +122,11 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - `Money`, `Illustration` e `pct` (`components/ui.tsx`);
   - ícones em `components/icons.tsx`.
 - Valores em tabela usam a classe `tabular`. Textos longos usam `truncate` com `min-w-0` no pai, para não estourar o layout.
+- **Cards da visão geral começam fechados** (`components/collapsible-card.tsx`).
+  - Monte cada card com `<Collapsible>`. O cabeçalho (título, valor principal e ilustração) fica sempre visível, com `<CollapseToggle />` no canto direito; o resto vai em `<CollapseBody>`.
+  - A escolha de abrir ou fechar fica salva no navegador, por card.
+  - Um link para o card (`#acerto`, `#amigos`, `openOnHash`) abre ele sozinho.
+  - Avisos importantes, como uma contestação esperando resposta, ficam fora do `<CollapseBody>`, para aparecerem com o card fechado.
 - **Carregamento:**
   - `(app)/loading.tsx` mostra o esqueleto da página;
   - `components/nav-progress.tsx` mostra a barra no topo;

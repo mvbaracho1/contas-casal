@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { formatBRL } from "@/lib/ledger";
 import { CardCarousel } from "./card-carousel";
+import { CollapseBody, CollapseToggle } from "./collapsible-card";
 import { Illustration, Money } from "./ui";
 
 export type PanelCard = {
@@ -45,7 +46,10 @@ export function CardsPanel({ cards, initialId }: { cards: PanelCard[]; initialId
           <Money cents={inv.totalCents} size="lg" />
         </div>
         <Illustration emoji="💳" />
+        <CollapseToggle />
       </div>
+      {/* dentro de um <Collapsible>: carrossel e próximas faturas só com o card aberto */}
+      <CollapseBody>
       <Link href={inv.detailHref} className="btn-outline mt-3 self-start">Ver fatura</Link>
 
       <CardCarousel
@@ -81,6 +85,7 @@ export function CardsPanel({ cards, initialId }: { cards: PanelCard[]; initialId
           );
         })}
       </div>
+      </CollapseBody>
     </>
   );
 }
