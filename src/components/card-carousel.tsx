@@ -29,10 +29,20 @@ export function CardCarousel({
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const selected = Math.max(0, slides.findIndex((s) => s.id === selectedId));
 
-  // mostra o cartão selecionado (ao abrir a página ou ao mudar a seleção por fora)
+  // mostra o cartão selecionado (ao abrir a página ou ao mudar a seleção por fora) e
+  // realinha quando o tamanho muda: na primeira pintura a largura ainda pode não ser a final
   useEffect(() => {
     const el = ref.current;
-    if (el && Math.round(el.scrollLeft / el.clientWidth) !== selected) el.scrollTo({ left: selected * el.clientWidth, behavior: "instant" });
+    if (!el) return;
+    const align = () => {
+      if (el.scrollLeft !== selected * el.clientWidth && Math.abs(el.scrollLeft / el.clientWidth - selected) > 0.01) {
+        el.scrollTo({ left: selected * el.clientWidth, behavior: "instant" });
+      }
+    };
+    align();
+    const ro = new ResizeObserver(align);
+    ro.observe(el);
+    return () => ro.disconnect();
   }, [selected]);
 
   const go = (i: number) => {

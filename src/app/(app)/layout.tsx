@@ -4,17 +4,12 @@ import { IconLogout } from "@/components/icons";
 import { BottomNav, SidebarNav } from "@/components/nav";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar } from "@/components/ui";
-import { requireUser } from "@/lib/auth";
-import { prisma } from "@/lib/db";
+import { getSession, requireUser } from "@/lib/auth";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await requireUser();
-  const couple = user.coupleId
-    ? await prisma.couple.findUnique({
-        where: { id: user.coupleId },
-        select: { name: true, members: { select: { id: true, name: true }, orderBy: { createdAt: "asc" } } },
-      })
-    : null;
+  // mesma busca da página (getSession tem cache por requisição): o layout não consulta o banco de novo
+  const couple = (await getSession())?.couple ?? null;
   const members = couple?.members ?? [{ id: user.id, name: user.name }];
   const myIndex = Math.max(0, members.findIndex((m) => m.id === user.id));
   const complete = members.length === 2;

@@ -1,5 +1,7 @@
 generator client {
-  provider = "prisma-client-js"
+  provider        = "prisma-client-js"
+  /// relationJoins: casal + membros numa consulta só (getSession)
+  previewFeatures = ["relationJoins"]
 }
 
 datasource db {

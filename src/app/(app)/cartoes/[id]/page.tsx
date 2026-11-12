@@ -161,7 +161,7 @@ export default async function CartaoPage({ params, searchParams }: { params: Pro
                     </form>
                   )}
                   <Link href={`/compras/importar?cartao=${card.id}`} className="btn-outline py-2 text-sm">📄 Importar fatura</Link>
-                  <Link href={`/cartoes?editar=${card.id}`} className="btn-outline py-2 text-sm">Editar</Link>
+                  <Link href={`/cartoes/${card.id}/editar`} className="btn-outline py-2 text-sm">Editar</Link>
                 </div>
               </div>
             </div>

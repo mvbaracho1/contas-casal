@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { saveBill, saveCard, saveIncome } from "@/app/actions-finance";
 import { BILL_CATEGORIES, CARD_COLORS, CARD_STYLES } from "@/lib/finance";
 import { Message, Submit } from "./form-bits";
+import Link from "next/link";
 import { ParamLink } from "./url-state";
 
 type Member = { id: string; name: string };
@@ -15,12 +16,17 @@ const chip = (active: boolean) =>
       : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-700 dark:hover:bg-zinc-800"
   }`;
 
-function FormShell({ title, editing, children }: { title: [string, string]; editing: boolean; children: React.ReactNode }) {
+/** `cancelHref`: em página própria, "Cancelar" volta para esse link; sem ele, fecha o ?editar= da lista. */
+function FormShell({ title, editing, cancelHref, children }: { title: [string, string]; editing: boolean; cancelHref?: string; children: React.ReactNode }) {
   return (
     <div className="card space-y-4">
       <div className="flex items-center justify-between gap-2">
         <h2 className="card-title">{editing ? title[1] : title[0]}</h2>
-        {editing && <ParamLink param="editar" value="" className="text-xs font-medium text-blue-600">Cancelar</ParamLink>}
+        {cancelHref ? (
+          <Link href={cancelHref} className="text-xs font-medium text-blue-600">Cancelar</Link>
+        ) : (
+          editing && <ParamLink param="editar" value="" className="text-xs font-medium text-blue-600">Cancelar</ParamLink>
+        )}
       </div>
       {children}
     </div>
@@ -109,12 +115,12 @@ export interface CardDefaults {
   color?: string;
 }
 
-export function CardForm({ members, defaults }: { members: Member[]; defaults: CardDefaults }) {
+export function CardForm({ members, defaults, cancelHref }: { members: Member[]; defaults: CardDefaults; cancelHref?: string }) {
   const [state, action] = useActionState(saveCard, undefined);
   const [ownerId, setOwnerId] = useState(defaults.ownerId);
   const [color, setColor] = useState(defaults.color ?? "black");
   return (
-    <FormShell title={["Novo cartão", "Editar cartão"]} editing={!!defaults.id}>
+    <FormShell title={["Novo cartão", "Editar cartão"]} editing={!!defaults.id} cancelHref={cancelHref}>
       <form action={action} className="space-y-4" key={defaults.id ?? "new"}>
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
         <div>
@@ -170,7 +176,7 @@ export interface BillDefaults {
   endMonth?: string | null;
 }
 
-export function BillForm({ members, defaults }: { members: Member[]; defaults: BillDefaults }) {
+export function BillForm({ members, defaults, cancelHref }: { members: Member[]; defaults: BillDefaults; cancelHref?: string }) {
   const [state, action] = useActionState(saveBill, undefined);
   const [paidById, setPaidById] = useState(defaults.paidById);
   // "renda" = proporcional; senão % de quem paga
@@ -180,7 +186,7 @@ export function BillForm({ members, defaults }: { members: Member[]; defaults: B
   const mode = split === "renda" ? "renda" : split === "50" ? "split" : split === "100" ? "payer" : split === "0" ? "other" : "custom";
 
   return (
-    <FormShell title={["Nova conta fixa", "Editar conta fixa"]} editing={!!defaults.id}>
+    <FormShell title={["Nova conta fixa", "Editar conta fixa"]} editing={!!defaults.id} cancelHref={cancelHref}>
       <form action={action} className="space-y-4" key={defaults.id ?? "new"}>
         {defaults.id && <input type="hidden" name="id" value={defaults.id} />}
         <div className="grid grid-cols-2 gap-3">

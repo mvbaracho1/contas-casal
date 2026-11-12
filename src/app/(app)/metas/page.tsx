@@ -1,12 +1,13 @@
 import { deleteGoal, deleteGoalEntry } from "@/app/actions-goals";
-import { GoalEntryForm, GoalForm } from "@/components/goal-forms";
-import { IconTrash } from "@/components/icons";
+import Link from "next/link";
+import { GoalEntryForm } from "@/components/goal-forms";
+import { IconPlus, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Money } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { emergencyFundSuggestion, summarizeGoal, type GoalSummary } from "@/lib/goals";
-import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
+import { summarizeGoal, type GoalSummary } from "@/lib/goals";
+import { currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
 import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
@@ -31,25 +32,22 @@ export default async function MetasPage() {
   const { couple, me, memberIds, names } = await requireCouple();
   const today = currentYm();
 
-  const [goals, bills] = await Promise.all([
-    prisma.goal.findMany({
-      where: { coupleId: couple.id },
-      include: { entries: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] } },
-      orderBy: { createdAt: "asc" },
-    }),
-    prisma.bill.findMany({ where: { coupleId: couple.id }, select: { amountCents: true, startMonth: true, endMonth: true } }),
-  ]);
+  const goals = await prisma.goal.findMany({
+    where: { coupleId: couple.id },
+    include: { entries: { orderBy: [{ date: "desc" }, { createdAt: "desc" }] } },
+    orderBy: { createdAt: "asc" },
+  });
   const items = goals.map((g) => ({ g, s: summarizeGoal(g, g.entries, today, memberIds) }));
   const totalSaved = items.reduce((a, x) => a + x.s.savedCents, 0);
   const totalTarget = items.reduce((a, x) => a + x.g.targetCents, 0);
   const monthly = items.reduce((a, x) => a + (x.s.monthlyCents ?? 0), 0);
-  const emergencyCents = emergencyFundSuggestion(bills.filter((b) => activeIn(b, today)).reduce((a, b) => a + b.amountCents, 0));
 
-  // "+ Nova meta": abre o formulário no painel
+  // cadastro em /metas/nova e edição em /metas/[id]/editar (páginas próprias)
   const newLink = (cls: string) => (
-    <ParamLink param="nova" value="1" push scrollTo="painel" clear={["ver", "editar"]} className={cls}>+ Nova meta</ParamLink>
+    <Link href="/metas/nova" className={cls} aria-label="Nova meta">
+      <IconPlus /> <span className="hidden sm:inline">Nova meta</span>
+    </Link>
   );
-  const nothingOpen = { ver: [""], editar: [""], nova: [""] };
 
   return (
     <>
@@ -57,9 +55,15 @@ export default async function MetasPage() {
         title="Metas"
         subtitle="Viagem, reserva de emergência e o que mais vocês querem juntar"
         addButton={false}
-        actions={newLink("btn hidden sm:inline-flex")}
+        actions={newLink("btn")}
       />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+      {/* nada aberto: uma coluna centralizada; com um item aberto (?ver=), o detalhe aparece ao lado */}
+      <ParamClass
+        not param="ver" values={[""]}
+        className="grid gap-4"
+        activeClassName="lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start"
+        inactiveClassName="mx-auto w-full max-w-3xl"
+      >
         <div className="min-w-0 space-y-4">
           <section className="card">
             <div className="flex items-start justify-between gap-3">
@@ -80,10 +84,11 @@ export default async function MetasPage() {
             )}
           </section>
 
-          <div className="flex items-center justify-between sm:hidden">
-            <span className="muted text-xs">{goals.length} {goals.length === 1 ? "meta" : "metas"}</span>
-            {newLink("btn")}
-          </div>
+          {items.length === 0 && (
+            <div className="card text-center">
+              <p className="muted text-sm">Nenhuma meta ainda. Que tal começar pela reserva de emergência ou pela próxima viagem?</p>
+            </div>
+          )}
 
           {items.length > 0 && (
             <ul className="grid gap-3 sm:grid-cols-2">
@@ -126,41 +131,14 @@ export default async function MetasPage() {
           )}
         </div>
 
-        <ParamClass
-          not={goals.length > 0}
-          when={goals.length > 0 ? nothingOpen : {}}
-          className="space-y-4"
-          activeClassName="order-first lg:order-none"
-        >
-          <div id="painel" className="scroll-mt-20" />
+        <ParamClass id="painel" not param="ver" values={[""]} className="scroll-mt-20 space-y-4" activeClassName="order-first lg:order-none">
           {items.map((item) => (
             <ParamView key={item.g.id} param="ver" values={[item.g.id]}>
               <Detail item={item} memberIds={memberIds} names={names} meId={me.id} members={couple.members} />
             </ParamView>
           ))}
-          {goals.map((editing) => (
-            <ParamView key={editing.id} when={{ ver: [""], editar: [editing.id] }}>
-              <GoalForm
-                key={editing.id}
-                emergencyCents={emergencyCents}
-                defaults={{ id: editing.id, name: editing.name, emoji: editing.emoji, targetCents: editing.targetCents, targetMonth: editing.targetMonth, note: editing.note }}
-              />
-            </ParamView>
-          ))}
-          {/* sem nenhuma meta, o formulário já aparece aberto */}
-          <ParamView when={{ ver: [""], editar: [""], nova: goals.length === 0 ? ["", "1"] : ["1"] }}>
-            <GoalForm key="new" emergencyCents={emergencyCents} defaults={{}} />
-          </ParamView>
-          {goals.length > 0 && (
-            <ParamView when={nothingOpen}>
-              <div className="card hidden text-center lg:block">
-                <p className="muted text-sm">Escolha uma meta para ver os aportes, ou crie uma nova.</p>
-                {newLink("btn mt-3")}
-              </div>
-            </ParamView>
-          )}
         </ParamClass>
-      </div>
+      </ParamClass>
     </>
   );
 }
@@ -275,7 +253,7 @@ function Detail({ item: { g, s }, memberIds, names, meId, members }: {
       )}
 
       <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-        <ParamLink param="editar" value={g.id} push scrollTo="painel" clear={["ver", "nova"]} className="btn-outline py-2 text-sm">Editar meta</ParamLink>
+        <Link href={`/metas/${g.id}/editar`} className="btn-outline py-2 text-sm">Editar meta</Link>
         <form action={deleteGoal}>
           <input type="hidden" name="id" value={g.id} />
           <ConfirmButton className="btn-danger" title="Excluir meta?" message={<>A meta <b>{g.emoji} {g.name}</b> e todos os aportes serão apagados.</>}>

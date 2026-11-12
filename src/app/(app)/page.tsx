@@ -341,7 +341,7 @@ export default async function VisaoGeralPage({
                   <ul className="mt-1 divide-y divide-zinc-100 dark:divide-zinc-800">
                     {houseLines.map((l) => (
                       <li key={l.sourceId}>
-                        <Link href={`/contas?editar=${l.sourceId}`} className="flex items-center gap-3 py-2.5 text-[13px]">
+                        <Link href={`/contas/${l.sourceId}/editar`} className="flex items-center gap-3 py-2.5 text-[13px]">
                           <span className={`size-2 shrink-0 rounded-full ${MEMBER_COLORS[idx(l.paidById)].dot}`} title={`Paga: ${names[l.paidById]}`} />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">{l.description}</span>
@@ -386,7 +386,7 @@ export default async function VisaoGeralPage({
                     </div>
                     <Illustration emoji="💳" />
                   </div>
-                  {empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes", "Adicionar cartão")}
+                  {empty("Cadastre os cartões para acompanhar faturas e limites.", "/cartoes/novo", "Adicionar cartão")}
                 </>
               ) : (
                 <CardsPanel
@@ -498,7 +498,7 @@ export default async function VisaoGeralPage({
                           return (
                             <li key={`${l.kind}-${l.sourceId}`} className="py-2.5">
                               <Link
-                                href={l.kind === "purchase" ? `/compras/${l.sourceId}` : `/contas?editar=${l.sourceId}`}
+                                href={l.kind === "purchase" ? `/compras/${l.sourceId}` : `/contas/${l.sourceId}/editar`}
                                 className="flex items-center gap-3 text-[13px]"
                               >
                                 <span className={`size-2 shrink-0 rounded-full ${MEMBER_COLORS[idx(l.paidById)].dot}`} title={`Pagou: ${names[l.paidById]}`} />
@@ -772,7 +772,7 @@ export default async function VisaoGeralPage({
             </div>
 
             {payables.length === 0 ? (
-              empty("Nenhuma conta ou fatura neste mês.", "/contas", "Adicionar conta fixa")
+              empty("Nenhuma conta ou fatura neste mês.", "/contas/nova", "Adicionar conta fixa")
             ) : (
               <>
                 <div className="-mx-4 mt-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:-mx-5 sm:px-5 [scrollbar-width:none]">
@@ -846,7 +846,7 @@ export default async function VisaoGeralPage({
               <Illustration emoji="🏡" />
             </div>
             {housingLines.length === 0 ? (
-              empty("Use a categoria “Moradia” nas contas fixas (aluguel, condomínio, financiamento…).", "/contas", "Adicionar conta")
+              empty("Use a categoria “Moradia” nas contas fixas (aluguel, condomínio, financiamento…).", "/contas/nova", "Adicionar conta")
             ) : (
               <>
                 {myIncome > 0 && (

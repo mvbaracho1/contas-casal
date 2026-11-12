@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { deleteReceivable, deleteReceivablePayment } from "@/app/actions-receivables";
-import { IconTrash } from "@/components/icons";
+import { IconPlus, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
-import { ChargeButtons, PaymentForm, ReceivableForm } from "@/components/receivable-forms";
+import { ChargeButtons, PaymentForm } from "@/components/receivable-forms";
 import { Avatar, Money, pct } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
 import { prisma } from "@/lib/db";
@@ -57,16 +57,15 @@ export default async function ReceberPage() {
     }
     return groups;
   };
-  const people = [...new Set(list.map((r) => r.personName.trim()))].sort();
 
   const seg = "rounded-lg px-3 py-1.5 text-xs font-semibold transition";
   const segOn = "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-white";
   const segOff = "text-zinc-500 hover:text-zinc-900 dark:hover:text-white";
-  // "+ Novo" aparece quando há algo aberto no painel (detalhe ou edição)
+  // cadastro em /receber/novo e edição em /receber/[id]/editar (páginas próprias)
   const newLink = (cls: string) => (
-    <ParamView not when={{ ver: [""], editar: [""] }}>
-      <ParamLink param="ver" value="" clear={["editar"]} className={cls}>+ Novo</ParamLink>
-    </ParamView>
+    <Link href="/receber/novo" className={cls} aria-label="Novo valor a receber">
+      <IconPlus /> <span className="hidden sm:inline">Novo</span>
+    </Link>
   );
 
   return (
@@ -75,9 +74,15 @@ export default async function ReceberPage() {
         title="A receber"
         subtitle="Compras de amigos e outros valores que te devem"
         addButton={false}
-        actions={newLink("btn hidden sm:inline-flex")}
+        actions={newLink("btn")}
       />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+      {/* nada aberto: uma coluna centralizada; com um item aberto (?ver=), o detalhe aparece ao lado */}
+      <ParamClass
+        not param="ver" values={[""]}
+        className="grid gap-4"
+        activeClassName="lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start"
+        inactiveClassName="mx-auto w-full max-w-3xl"
+      >
         <div className="min-w-0 space-y-4">
           <section className="card">
             <div className="flex items-start justify-between gap-3">
@@ -109,7 +114,6 @@ export default async function ReceberPage() {
               <ParamLink param="filtro" value="" className={seg} activeClassName={segOn} inactiveClassName={segOff}>Em aberto · {open.length}</ParamLink>
               <ParamLink param="filtro" value="todos" className={seg} activeClassName={segOn} inactiveClassName={segOff}>Todos · {items.length}</ParamLink>
             </div>
-            {newLink("btn sm:hidden")}
           </div>
 
           {[
@@ -121,7 +125,7 @@ export default async function ReceberPage() {
               {groups.size === 0 && (
                 <div className="card text-center">
                   <p className="muted text-sm">
-                    {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Cadastre aqui, ou marque “De um amigo” ao lançar ou importar uma compra."}
+                    {items.length ? "Ninguém te deve nada agora. 🎉" : "Nenhum valor a receber ainda. Use o botão Novo, ou marque “De um amigo” ao lançar ou importar uma compra."}
                   </p>
                 </div>
               )}
@@ -181,32 +185,14 @@ export default async function ReceberPage() {
           ))}
         </div>
 
-        <ParamClass not when={{ ver: [""], editar: [""] }} className="space-y-4 scroll-mt-4" activeClassName="order-first lg:order-none">
-          <div id="painel" className="scroll-mt-20" />
+        <ParamClass id="painel" not param="ver" values={[""]} className="scroll-mt-20 space-y-4" activeClassName="order-first lg:order-none">
           {items.map((item) => (
             <ParamView key={item.r.id} param="ver" values={[item.r.id]}>
               <Detail item={item} names={names} />
             </ParamView>
           ))}
-          {list.map((editing) => (
-            <ParamView key={editing.id} when={{ ver: [""], editar: [editing.id] }}>
-              <ReceivableForm
-                key={editing.id}
-                members={couple.members}
-                people={people}
-                defaults={{
-                  id: editing.id, personName: editing.personName, description: editing.description, totalCents: editing.totalCents,
-                  installments: editing.installments, firstMonth: editing.firstMonth, creditorId: editing.creditorId, note: editing.note,
-                  linkedPurchaseId: editing.purchaseId,
-                }}
-              />
-            </ParamView>
-          ))}
-          <ParamView when={{ ver: [""], editar: [""] }}>
-            <ReceivableForm key="new" members={couple.members} people={people} defaults={{ firstMonth: today, creditorId: me.id }} />
-          </ParamView>
         </ParamClass>
-      </div>
+      </ParamClass>
     </>
   );
 }
@@ -299,7 +285,7 @@ function Detail({ item: { r, s }, names }: { item: Item; names: Record<string, s
       )}
 
       <div className="flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 dark:border-zinc-800">
-        <ParamLink param="editar" value={r.id} push scrollTo="painel" clear={["ver"]} className="btn-outline py-2 text-sm">Editar</ParamLink>
+        <Link href={`/receber/${r.id}/editar`} className="btn-outline py-2 text-sm">Editar</Link>
         <form action={deleteReceivable}>
           <input type="hidden" name="id" value={r.id} />
           <ConfirmButton

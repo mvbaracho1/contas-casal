@@ -1,6 +1,6 @@
+import Link from "next/link";
 import { deleteBill } from "@/app/actions-finance";
-import { BillForm } from "@/components/finance-forms";
-import { IconTrash } from "@/components/icons";
+import { IconPlus, IconTrash } from "@/components/icons";
 import { PageHeader } from "@/components/page-header";
 import { Avatar, Money } from "@/components/ui";
 import { requireCouple } from "@/lib/auth";
@@ -8,9 +8,8 @@ import { prisma } from "@/lib/db";
 import { BILL_CATEGORIES, BILL_EMOJI, splitLabel } from "@/lib/finance";
 import { activeIn, currentYm, formatBRL, formatYm } from "@/lib/ledger";
 import { ConfirmButton } from "@/components/confirm-button";
-import { ParamClass, ParamLink, ParamView } from "@/components/url-state";
 
-// ?editar=ID troca no navegador (url-state): os formulários de edição já vêm prontos do servidor.
+// Cadastro em /contas/nova e edição em /contas/[id]/editar (páginas próprias).
 export default async function ContasPage() {
   const { couple, me, memberIds, names } = await requireCouple();
   const bills = await prisma.bill.findMany({ where: { coupleId: couple.id }, orderBy: [{ dueDay: "asc" }, { name: "asc" }] });
@@ -23,8 +22,17 @@ export default async function ContasPage() {
 
   return (
     <>
-      <PageHeader title="Contas fixas" subtitle="Aluguel, condomínio, assinaturas e o que se repete todo mês" addButton={false} />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_400px] lg:items-start">
+      <PageHeader
+        title="Contas fixas"
+        subtitle="Aluguel, condomínio, assinaturas e o que se repete todo mês"
+        addButton={false}
+        actions={
+          <Link href="/contas/nova" className="btn" aria-label="Nova conta fixa">
+            <IconPlus /> <span className="hidden sm:inline">Nova conta</span>
+          </Link>
+        }
+      />
+      <div className="mx-auto max-w-3xl">
         <div className="min-w-0 space-y-4">
           <section className="card flex items-start justify-between gap-3">
             <div>
@@ -50,13 +58,13 @@ export default async function ContasPage() {
                   return (
                     <li key={b.id} className={`flex items-center gap-3 py-3 ${on ? "" : "opacity-60"}`}>
                       <Avatar name={names[b.paidById]} index={memberIds.indexOf(b.paidById)} size="sm" />
-                      <ParamLink param="editar" value={b.id} push scrollTo="painel" className="min-w-0 flex-1">
+                      <Link href={`/contas/${b.id}/editar`} className="min-w-0 flex-1">
                         <p className="truncate text-sm font-medium">{b.name}</p>
                         <p className="muted truncate text-xs">
                           Dia {b.dueDay} · paga {b.paidById === me.id ? "você" : names[b.paidById]} · {splitLabel(b.payerSharePct, names[b.paidById], names[other(b.paidById)])}
                           {!on && " · fora do período"}
                         </p>
-                      </ParamLink>
+                      </Link>
                       <span className="tabular text-sm font-semibold">{formatBRL(b.amountCents)}</span>
                       <form action={deleteBill}>
                         <input type="hidden" name="id" value={b.id} />
@@ -74,26 +82,6 @@ export default async function ContasPage() {
             </section>
           ))}
         </div>
-
-        <ParamClass not param="editar" values={[""]} activeClassName="order-first lg:order-none">
-          <div id="painel" className="scroll-mt-20" />
-          {bills.map((editing) => (
-            <ParamView key={editing.id} param="editar" values={[editing.id]}>
-              <BillForm
-                key={editing.id}
-                members={couple.members}
-                defaults={{
-                  id: editing.id, name: editing.name, category: editing.category, amountCents: editing.amountCents, dueDay: editing.dueDay,
-                  paidById: editing.paidById, payerSharePct: editing.payerSharePct, startMonth: editing.startMonth, endMonth: editing.endMonth,
-                }}
-              />
-            </ParamView>
-          ))}
-          <ParamView param="editar" values={[""]}>
-            <BillForm key="new"
-                members={couple.members} defaults={{ paidById: me.id, startMonth: month }} />
-          </ParamView>
-        </ParamClass>
       </div>
     </>
   );

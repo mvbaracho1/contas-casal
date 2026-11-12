@@ -133,6 +133,21 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - recarregar, compartilhar o link e o `redirect` depois de salvar continuam funcionando, porque o valor vem da URL.
   - Use `<Link>` normal só quando a troca precisa de dados novos do servidor, como mudar de mês.
   - O carrossel de cartões da visão geral segue a mesma ideia (`components/cards-panel.tsx`).
+  - Na tela Cartões, a lista é um carrossel (`components/cards-browser.tsx`, com o cartão em `?cartao=`). O cadastro fica em `/cartoes/novo` e a edição em `/cartoes/[id]/editar`, em páginas próprias.
+- **Cadastro e edição em páginas próprias.** Cartões, contas fixas, valores a receber e metas não têm formulário na tela da lista. A lista tem um botão **+** no topo, que aparece só como "+" no celular.
+  - As rotas seguem o padrão `/<tela>/nova|novo` e `/<tela>/[id]/editar`.
+  - O "Cancelar" do formulário é um link (`cancelHref`) de volta para a lista ou para o item aberto (`?ver=ID`).
+  - Detalhes (`?ver=`) e filtros continuam na própria lista, sem recarregar. Com nada aberto, a lista é uma coluna centralizada (`max-w-3xl`); com um item aberto, o detalhe aparece ao lado.
+  - Tela vazia não tem botão de criar: o botão do topo basta.
+
+## Desempenho
+
+- **Sessão uma vez por requisição:** `getSession()` (`lib/auth.ts`) usa o `cache` do React. Layout, página, `requireUser()` e `requireCouple()` compartilham o mesmo resultado. Nunca busque de novo o usuário ou o casal no banco: use o que essas funções devolvem.
+- O casal vem com os membros numa consulta só (`relationLoadStrategy: "join"`, preview `relationJoins` no `schema.prisma`).
+- **Consultas da página em paralelo** com `Promise.all`. Cada consulta em sequência paga a distância até o banco.
+- **Cache de navegação:** `staleTimes.dynamic = 30` (`next.config.ts`) reabre na hora as páginas vistas nos últimos 30s. As actions já limpam esse cache com `revalidatePath("/", "layout")`.
+- **Para investigar lentidão:** `PRISMA_QUERY_LOG=1` mostra no terminal cada consulta e quanto ela demorou.
+- **Região:** o banco (Neon) fica em São Paulo (`sa-east-1`), e as funções da Vercel também (`"regions": ["gru1"]` no `vercel.json`). Mantenha os dois juntos. Para conferir, o cabeçalho `x-vercel-id` mostra `edge::função::…` e deve ter `gru1::gru1`.
 
 ## Banco e migrações
 

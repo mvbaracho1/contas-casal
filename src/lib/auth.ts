@@ -1,5 +1,6 @@
 import "server-only";
 import { cookies } from "next/headers";
+import { cache } from "react";
 import { redirect } from "next/navigation";
 import { prisma } from "./db";
 import { SESSION_COOKIE, sessionCookieOptions, signSession, verifySession } from "./session";
@@ -14,14 +15,32 @@ export async function endSession() {
   jar.delete(SESSION_COOKIE);
 }
 
-export async function currentUser() {
+/**
+ * Usuário e casal da sessão, buscados **uma vez por requisição** (`cache` do React):
+ * o layout e a página chamam isto e o banco só é consultado na primeira vez.
+ * Usuário e casal vêm em paralelo, e o casal já com os membros numa consulta só (join).
+ */
+export const getSession = cache(async () => {
   const jar = await cookies();
   const userId = await verifySession(jar.get(SESSION_COOKIE)?.value);
   if (!userId) return null;
-  return prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, name: true, email: true, coupleId: true },
-  });
+  const [user, couple] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, name: true, email: true, coupleId: true },
+    }),
+    prisma.couple.findFirst({
+      where: { members: { some: { id: userId } } },
+      include: { members: { select: { id: true, name: true }, orderBy: { createdAt: "asc" } } },
+      relationLoadStrategy: "join",
+    }),
+  ]);
+  if (!user) return null;
+  return { user, couple: user.coupleId && couple?.id === user.coupleId ? couple : null };
+});
+
+export async function currentUser() {
+  return (await getSession())?.user ?? null;
 }
 
 export async function requireUser() {
@@ -34,10 +53,7 @@ export async function requireUser() {
 export async function requireCouple() {
   const user = await requireUser();
   if (!user.coupleId) redirect("/casal");
-  const couple = await prisma.couple.findUnique({
-    where: { id: user.coupleId },
-    include: { members: { select: { id: true, name: true }, orderBy: { createdAt: "asc" } } },
-  });
+  const couple = (await getSession())?.couple;
   if (!couple || couple.members.length < 2) redirect("/casal");
   const me = couple.members.find((m) => m.id === user.id)!;
   const partner = couple.members.find((m) => m.id !== user.id)!;

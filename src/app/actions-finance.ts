@@ -99,7 +99,7 @@ export async function saveCard(_: FormState, form: FormData): Promise<FormState>
     // Cartão novo: já oferece importar a fatura dele
     return done(`/compras/importar?cartao=${created.id}&novo=1`, `Cartão ${d.name} adicionado`);
   }
-  return done("/cartoes", "Cartão atualizado");
+  return done(`/cartoes?cartao=${id}`, "Cartão atualizado");
 }
 
 /**

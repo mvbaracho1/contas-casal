@@ -119,17 +119,19 @@ export function ParamView({ children, ...cond }: Condition & { children: React.R
 
 /** Aplica classes conforme a URL (ex.: destacar o item selecionado de uma lista). */
 export function ParamClass({
+  id,
   className = "",
   activeClassName = "",
   inactiveClassName = "",
   children,
   ...cond
 }: Condition & {
+  id?: string;
   className?: string;
   activeClassName?: string;
   inactiveClassName?: string;
   children: React.ReactNode;
 }) {
   const on = useMatches(cond);
-  return <div className={`${className} ${on ? activeClassName : inactiveClassName}`}>{children}</div>;
+  return <div id={id} className={`${className} ${on ? activeClassName : inactiveClassName}`}>{children}</div>;
 }
