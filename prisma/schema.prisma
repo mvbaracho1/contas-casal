@@ -9,22 +9,23 @@ datasource db {
 }
 
 model Couple {
-  id          String       @id @default(cuid())
-  name        String
-  inviteCode  String       @unique
+  id           String       @id @default(cuid())
+  name         String
+  inviteCode   String       @unique
   /// e-mail do par convidado (o convite também funciona só com o código)
   inviteEmail  String?
   inviteSentAt DateTime?
-  createdAt   DateTime     @default(now())
-  members     User[]
-  purchases   Purchase[]
-  settlements Settlement[]
-  incomes     Income[]
-  cards       Card[]
-  bills       Bill[]
-  paidMarks   PaidMark[]
-  receivables Receivable[]
-  goals       Goal[]
+  createdAt    DateTime     @default(now())
+  members      User[]
+  purchases    Purchase[]
+  settlements  Settlement[]
+  incomes      Income[]
+  cards        Card[]
+  bills        Bill[]
+  paidMarks    PaidMark[]
+  receivables  Receivable[]
+  goals        Goal[]
+  disputes     Dispute[]
 }
 
 model User {
@@ -38,15 +39,17 @@ model User {
   couple       Couple?  @relation(fields: [coupleId], references: [id])
   createdAt    DateTime @default(now())
 
-  paidPurchases    Purchase[]   @relation("PaidBy")
-  settlementsSent  Settlement[] @relation("SettlementFrom")
-  settlementsRecvd Settlement[] @relation("SettlementTo")
+  paidPurchases    Purchase[]           @relation("PaidBy")
+  settlementsSent  Settlement[]         @relation("SettlementFrom")
+  settlementsRecvd Settlement[]         @relation("SettlementTo")
   incomes          Income[]
   cards            Card[]
   bills            Bill[]
   resetTokens      PasswordResetToken[]
-  receivables      Receivable[]  @relation("ReceivableCreditor")
+  receivables      Receivable[]         @relation("ReceivableCreditor")
   goalEntries      GoalEntry[]
+  disputesOpened   Dispute[]            @relation("DisputeOpenedBy")
+  disputesResolved Dispute[]            @relation("DisputeResolvedBy")
 }
 
 /// Uma compra (à vista ou parcelada).
@@ -56,31 +59,32 @@ model User {
 ///   0   -> é toda do outro (ex.: esposa comprou no cartão do marido)
 ///   100 -> é toda de quem pagou (não gera dívida)
 model Purchase {
-  id            String   @id @default(cuid())
-  coupleId      String
-  couple        Couple   @relation(fields: [coupleId], references: [id], onDelete: Cascade)
-  description   String
-  category      String?
-  totalCents    Int
-  installments  Int      @default(1)
+  id               String      @id @default(cuid())
+  coupleId         String
+  couple           Couple      @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  description      String
+  category         String?
+  totalCents       Int
+  installments     Int         @default(1)
   /// Parcela a partir da qual a compra entra nas contas (as anteriores foram antes do app)
-  startInstallment Int   @default(1)
+  startInstallment Int         @default(1)
   /// Compra recorrente (assinatura): repete todo mês a partir de firstMonth
-  recurring     Boolean  @default(false)
+  recurring        Boolean     @default(false)
   /// Último mês da recorrência (YYYY-MM); null = sem fim
-  endMonth      String?
+  endMonth         String?
   /// Mês da 1ª parcela no formato YYYY-MM (mês da fatura)
-  firstMonth    String
-  purchaseDate  DateTime
-  paidById      String
-  paidBy        User     @relation("PaidBy", fields: [paidById], references: [id])
+  firstMonth       String
+  purchaseDate     DateTime
+  paidById         String
+  paidBy           User        @relation("PaidBy", fields: [paidById], references: [id])
   /// % de quem pagou; null = proporcional à renda do casal (calculado mês a mês)
-  payerSharePct Int?     @default(50)
-  cardId        String?
-  card          Card?    @relation(fields: [cardId], references: [id], onDelete: SetNull)
+  payerSharePct    Int?        @default(50)
+  cardId           String?
+  card             Card?       @relation(fields: [cardId], references: [id], onDelete: SetNull)
   /// Compra feita por um terceiro (amigo) no cartão: o valor a receber dele
-  receivable    Receivable?
-  createdAt     DateTime @default(now())
+  receivable       Receivable?
+  disputes         Dispute[]
+  createdAt        DateTime    @default(now())
 
   @@index([coupleId, firstMonth])
 }
@@ -154,6 +158,7 @@ model Bill {
   endMonth      String?
   createdAt     DateTime   @default(now())
   paidMarks     PaidMark[]
+  disputes      Dispute[]
 
   @@index([coupleId])
 }
@@ -267,4 +272,37 @@ model SignupCodeAttempt {
   createdAt DateTime @default(now())
 
   @@index([ip, createdAt])
+}
+
+/// Contestação de um lançamento do acerto do mês.
+/// Quem deve a parte (quem não pagou) abre com uma justificativa; quem pagou aceita ou recusa.
+/// Aceita: vale a divisão proposta — na compra inteira (todas as parcelas) ou na conta fixa só em `month`.
+model Dispute {
+  id               String    @id @default(cuid())
+  coupleId         String
+  couple           Couple    @relation(fields: [coupleId], references: [id], onDelete: Cascade)
+  /// "purchase" ou "bill"
+  kind             String
+  purchaseId       String?
+  purchase         Purchase? @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  billId           String?
+  bill             Bill?     @relation(fields: [billId], references: [id], onDelete: Cascade)
+  /// mês do acerto em que foi aberta ("YYYY-MM")
+  month            String
+  openedById       String
+  openedBy         User      @relation("DisputeOpenedBy", fields: [openedById], references: [id])
+  reason           String
+  /// divisão proposta: "100" (só de quem pagou), "50" ou "renda"
+  proposal         String    @default("100")
+  /// "aberta" | "aceita" | "recusada"
+  status           String    @default("aberta")
+  response         String?
+  resolvedById     String?
+  resolvedBy       User?     @relation("DisputeResolvedBy", fields: [resolvedById], references: [id])
+  resolvedAt       DateTime?
+  /// compra: % de quem pagou antes de aceitar (histórico)
+  previousSharePct Int?
+  createdAt        DateTime  @default(now())
+
+  @@index([coupleId, month])
 }

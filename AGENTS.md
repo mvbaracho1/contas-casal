@@ -66,6 +66,12 @@ pnpm test           # Vitest (ledger + leitor de faturas)
   - Os valores do `Receivable` acompanham a compra. Use `syncPurchaseReceivable()` (`lib/receivable-sync.ts`) sempre que salvar uma compra.
   - Não deixe desligar o amigo de uma compra que já tem pagamentos registrados.
   - Os pagamentos são distribuídos da parcela mais antiga para a mais nova.
+- **Contestação no acerto** (`Dispute`, `actions-disputes.ts`):
+  - só quem deve a parte (quem não pagou) contesta, com justificativa e uma **proposta** de nova divisão: `"100"` (só de quem pagou), `"50"` ou `"renda"`, sempre diferente da atual;
+  - quem pagou responde, e recusar exige resposta;
+  - aberta ou recusada, o lançamento continua como está;
+  - aceita, a compra recebe a divisão proposta em todas as parcelas (`payerSharePct`; renda = `null`), com o valor anterior guardado em `previousSharePct`;
+  - aceita, a conta fixa usa a divisão proposta **só naquele mês**, via `Fixed.billSplits` e `billMonthKey()` no `ledger.ts`. Passe sempre `billSplits` ao chamar `summarizeMonth` com contas fixas.
 - **Excluir o cartão** (`deleteCard`) apaga também todas as compras dele, com a mesma regra dos `Receivable` abaixo.
 - **Excluir fatura ou compras do cartão** (`deleteCardPurchases`, na tela do cartão). O cartão continua em ambos os casos.
   - "Fatura" apaga as compras com parcela no mês, via `invoicePurchases()` em `lib/finance.ts`. As parceladas saem inteiras. Assinaturas que começaram antes desse mês continuam, para não apagar meses passados.

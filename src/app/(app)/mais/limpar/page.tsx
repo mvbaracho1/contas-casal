@@ -24,7 +24,7 @@ export default async function LimparDadosPage() {
     { key: "cartoes", label: "Cartões", emoji: "💳", count: cartoes },
     { key: "contas", label: "Contas fixas", emoji: "📅", count: contas, hint: "E as marcações de “pago”" },
     { key: "renda", label: "Renda", emoji: "💼", count: renda },
-    { key: "acertos", label: "Transferências (acertos)", emoji: "🔁", count: acertos },
+    { key: "acertos", label: "Transferências (acertos)", emoji: "🔁", count: acertos, hint: "Inclui as contestações" },
     { key: "receber", label: "A receber", emoji: "🤝", count: receber, hint: "E os recebimentos registrados" },
     { key: "metas", label: "Metas", emoji: "🎯", count: metas, hint: "E os aportes" },
   ];

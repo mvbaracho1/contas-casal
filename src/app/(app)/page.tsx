@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { deleteSettlement } from "@/app/actions";
+import { cancelDispute } from "@/app/actions-disputes";
+import { DisputeOpen, DisputeResolve, type ProposalOption } from "@/components/dispute-forms";
 import { togglePaid } from "@/app/actions-finance";
 import { CollapsibleCard } from "@/components/collapsible-card";
 import { CardsPanel } from "@/components/cards-panel";
@@ -13,7 +15,7 @@ import { Avatar, fmtPct, Illustration, MEMBER_COLORS, Money, pct } from "@/compo
 import { requireCouple } from "@/lib/auth";
 import { BILL_EMOJI, cardInvoice, cardOutstanding, dueDate, splitLabel } from "@/lib/finance";
 import { loadCoupleData } from "@/lib/finance-data";
-import { addMonths, currentYm, formatBRL, incomeByUser, summarizeMonth, type InstallmentLine } from "@/lib/ledger";
+import { addMonths, billMonthKey, currentYm, formatBRL, formatYm, incomeByUser, summarizeMonth, type InstallmentLine } from "@/lib/ledger";
 import { prisma } from "@/lib/db";
 import { summarizeReceivable } from "@/lib/receivables";
 import { ConfirmButton } from "@/components/confirm-button";
@@ -39,10 +41,20 @@ export default async function VisaoGeralPage({
   const idx = (id: string) => memberIds.indexOf(id);
   const who = (id: string) => (id === me.id ? "Você" : names[id]);
 
-  const [{ purchases, settlements, incomes, cards, bills, paidMarks }, receivables] = await Promise.all([
+  const [{ purchases, settlements, incomes, cards, bills, paidMarks }, receivables, disputes] = await Promise.all([
     loadCoupleData(couple.id),
     prisma.receivable.findMany({ where: { coupleId: couple.id }, include: { payments: { select: { amountCents: true } } } }),
+    prisma.dispute.findMany({
+      where: { coupleId: couple.id },
+      include: { purchase: { select: { description: true, paidById: true } }, bill: { select: { name: true } } },
+      orderBy: { createdAt: "desc" },
+    }),
   ]);
+  // contas fixas com contestação aceita: vale a divisão combinada naquele mês
+  const proposalPct = (v: string) => (v === "renda" ? null : Number(v));
+  const billSplits = disputes
+    .filter((d) => d.status === "aceita" && d.billId)
+    .map((d) => [billMonthKey(d.billId!, d.month), proposalPct(d.proposal)] as const);
   // Lembrete de cobrança: valores de terceiros vencidos (sempre em relação a hoje)
   const lateReceivables = receivables
     .map((r) => ({ r, s: summarizeReceivable(r, r.payments, currentYm()) }))
@@ -81,12 +93,12 @@ export default async function VisaoGeralPage({
       .map((r) => [r.personName.trim().toLowerCase(), r.personName.trim()] as const),
   ).values()].slice(0, 6);
   const friendOpenAll = receivables.reduce((a, r) => a + summarizeReceivable(r, r.payments, currentYm()).remainingCents, 0);
-  const s = summarizeMonth(purchases, settlements, month, memberIds, { bills, incomes });
+  const s = summarizeMonth(purchases, settlements, month, memberIds, { bills, incomes, billSplits });
   const monthSettlements = settlements.filter((x) => x.month === month);
   const pending = s.monthPending;
   // O que entra no acerto: linhas em que um deve uma parte ao outro (compras de amigos ficam fora)
   const settleLines = s.lines
-    .filter((l) => l.otherShareCents > 0 && !(l.kind === "purchase" && friendByPurchase.has(l.sourceId)))
+    .filter((l) => (l.otherShareCents > 0 || l.waived) && !(l.kind === "purchase" && friendByPurchase.has(l.sourceId)))
     .map((l) => ({ ...l, net: l.paidById === me.id ? l.otherShareCents : -l.otherShareCents }))
     .sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
   const settleGroups = [
@@ -95,6 +107,31 @@ export default async function VisaoGeralPage({
   ].filter((g) => g.list.length > 0);
   const settleGross = sum(settleLines.map((l) => l.net));
   const settledNet = sum(monthSettlements.map((t) => (t.fromId === partner.id ? t.amountCents : -t.amountCents)));
+  // ---------- Contestações ----------
+  // a mais recente de cada lançamento: compra (vale para todas as parcelas) ou conta fixa no mês
+  const disputeOf = (l: InstallmentLine) =>
+    disputes.find((d) => (l.kind === "purchase" ? d.purchaseId === l.sourceId : d.billId === l.sourceId && d.month === month));
+  const waitingMe = disputes.filter((d) => d.status === "aberta" && d.openedById !== me.id);
+  // compras que saíram do acerto por contestação aceita neste mês ("só de quem pagou")
+  const acceptedPurchases = disputes.filter((d) => d.status === "aceita" && d.purchaseId && d.month === month && d.proposal === "100");
+  // divisões que dá para propor ("100" = só de quem pagou, "50", "renda"), em texto
+  const rendaPayerPct = (payerId: string) => (coupleIncome > 0 ? Math.round((income[payerId] / coupleIncome) * 100) : 50);
+  const splitText = (v: string, payerId: string) => {
+    const otherId = memberIds.find((m) => m !== payerId)!;
+    if (v === "100") return payerId === me.id ? "só sua" : `só de ${names[payerId]}`;
+    if (v === "50") return "dividida 50/50";
+    const pp = rendaPayerPct(payerId);
+    return `pela renda (${payerId === me.id ? "você" : names[payerId]} ${pp}% · ${otherId === me.id ? "você" : names[otherId]} ${100 - pp}%)`;
+  };
+  const splitKey = (pct: number | null) => (pct === null ? "renda" : String(pct));
+  const proposalOptions = (payerId: string, current: number | null): ProposalOption[] =>
+    (["100", "50", "renda"] as const)
+      .filter((v) => v !== splitKey(current))
+      .map((v) => ({ value: v, label: splitText(v, payerId).replace(/^./, (c) => c.toUpperCase()) }));
+  const acceptHint = (kind: string, proposal: string, payerId: string) =>
+    kind === "purchase"
+      ? `Se aceitar, a compra fica ${splitText(proposal, payerId)} em todas as parcelas.`
+      : `Se aceitar, a conta fica ${splitText(proposal, payerId)} só em ${mp.name.toLowerCase()}.`;
   const signed = (net: number) => (net > 0 ? `${partner.name} te deve` : net < 0 ? `você deve a ${partner.name}` : "ninguém deve");
   const hasOlderPending =
     s.cumulative.amountCents !== pending.amountCents || s.cumulative.debtorId !== pending.debtorId;
@@ -411,6 +448,20 @@ export default async function VisaoGeralPage({
               {pending.debtorId && <QuickSettle month={month} fromId={pending.debtorId} amount={centsToInput(pending.amountCents)} />}
             </div>
 
+            {waitingMe.length > 0 && (
+              <a
+                href={waitingMe.some((d) => d.month === month) ? "#contestacoes" : `/?mes=${waitingMe[0].month}#acerto`}
+                className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:bg-amber-950/60 dark:text-amber-200"
+              >
+                <span aria-hidden>⚖️</span>
+                <span className="flex-1">
+                  <b>{partner.name}</b> contestou{" "}
+                  <b>{waitingMe.length === 1 ? "1 lançamento" : `${waitingMe.length} lançamentos`}</b>
+                  {waitingMe.every((d) => d.month === month) ? "" : ` (${[...new Set(waitingMe.map((d) => formatYm(d.month).toLowerCase()))].join(", ")})`}. Responda abaixo →
+                </span>
+              </a>
+            )}
+
             {hasOlderPending && (
               <p className="flex items-start gap-2 rounded-xl bg-amber-50 px-3 py-2.5 text-xs text-amber-900 dark:bg-amber-950/60 dark:text-amber-200">
                 <IconAlert className="mt-px shrink-0" width={14} height={14} />
@@ -425,7 +476,7 @@ export default async function VisaoGeralPage({
               </p>
             )}
 
-            {settleLines.length > 0 && (
+            {(settleLines.length > 0 || acceptedPurchases.length > 0) && (
               <details open className="group rounded-xl border border-zinc-200/70 dark:border-zinc-800">
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden">
                   <span className="font-medium">
@@ -442,39 +493,108 @@ export default async function VisaoGeralPage({
                         {g.list.map((l) => {
                           const pctVal = l.kind === "purchase"
                             ? purchases.find((p) => p.id === l.sourceId)?.payerSharePct ?? null
-                            : billOf(l)?.payerSharePct ?? null;
+                            : l.splitOverride !== undefined ? l.splitOverride : billOf(l)?.payerSharePct ?? null;
                           const otherId = memberIds.find((m) => m !== l.paidById)!;
                           return (
-                            <li key={`${l.kind}-${l.sourceId}`}>
+                            <li key={`${l.kind}-${l.sourceId}`} className="py-2.5">
                               <Link
                                 href={l.kind === "purchase" ? `/compras/${l.sourceId}` : `/contas?editar=${l.sourceId}`}
-                                className="flex items-center gap-3 py-2.5 text-[13px]"
+                                className="flex items-center gap-3 text-[13px]"
                               >
                                 <span className={`size-2 shrink-0 rounded-full ${MEMBER_COLORS[idx(l.paidById)].dot}`} title={`Pagou: ${names[l.paidById]}`} />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate">
+                                  <span className={`block truncate ${l.waived ? "text-zinc-400 line-through" : ""}`}>
                                     {l.description}
                                     {l.of > 1 && <span className="muted"> · {l.number}/{l.of}</span>}
                                     {l.recurring && <span className="muted"> · 🔁</span>}
                                   </span>
                                   <span className="muted block truncate text-[11px]">
                                     {formatBRL(l.amountCents)} · pagou {l.paidById === me.id ? "você" : names[l.paidById]} ·{" "}
-                                    {splitLabel(pctVal, who(l.paidById), who(otherId)).replace("Você", "você")}
+                                    {l.waived ? "fora do acerto neste mês" : splitLabel(pctVal, who(l.paidById), who(otherId)).replace("Você", "você")}
                                   </span>
                                 </span>
                                 <span className="shrink-0 text-right">
-                                  <span className={`tabular block font-semibold ${l.net > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                                    {l.net > 0 ? "+" : "−"} {formatBRL(Math.abs(l.net))}
+                                  <span className={`tabular block font-semibold ${l.net > 0 ? "text-emerald-600 dark:text-emerald-400" : l.net < 0 ? "text-rose-600 dark:text-rose-400" : "text-zinc-400"}`}>
+                                    {l.net > 0 ? "+" : l.net < 0 ? "−" : ""} {formatBRL(Math.abs(l.net))}
                                   </span>
-                                  <span className="muted block text-[10px]">{l.net > 0 ? `${partner.name} deve` : "você deve"}</span>
+                                  <span className="muted block text-[10px]">{l.net > 0 ? `${partner.name} deve` : l.net < 0 ? "você deve" : "ninguém deve"}</span>
                                 </span>
                               </Link>
+                              {(() => {
+                                const d = disputeOf(l);
+                                const payer = l.paidById === me.id ? "você" : names[l.paidById];
+                                const iOwe = l.paidById !== me.id;
+                                const options = proposalOptions(l.paidById, pctVal);
+                                // compra: pode contestar de novo depois de respondida; conta fixa: uma aceita por mês
+                                const canOpen = iOwe && !l.waived && options.length > 0 && (!d || d.status === "recusada" || (d.status === "aceita" && l.kind === "purchase"));
+                                return (
+                                  <div className="ml-5 mt-1 space-y-1 text-[11px]">
+                                    {d?.status === "aberta" && (
+                                      <div id={d.openedById !== me.id ? "contestacoes" : undefined} className="scroll-mt-20 rounded-xl border border-amber-200 bg-amber-50/70 p-2.5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+                                        <p>
+                                          <b>⚖️ {d.openedById === me.id ? "Você contestou" : `${names[d.openedById]} contestou`}</b>
+                                          {d.month !== month && <span className="text-amber-700 dark:text-amber-300"> em {formatYm(d.month).toLowerCase()}</span>}: “{d.reason}”
+                                        </p>
+                                        <p className="mt-0.5">Proposta: <b>{splitText(d.proposal, l.paidById)}</b></p>
+                                        {d.openedById === me.id ? (
+                                          <div className="mt-1 flex items-center justify-between gap-2">
+                                            <span className="text-amber-700 dark:text-amber-300">Aguardando {names[l.paidById]} responder.</span>
+                                            <form action={cancelDispute}>
+                                              <input type="hidden" name="id" value={d.id} />
+                                              <ConfirmButton
+                                                className="font-semibold text-amber-800 hover:underline dark:text-amber-300"
+                                                title="Desistir da contestação?" confirmLabel="Desistir"
+                                                message={<>A contestação de <b>{l.description}</b> será apagada e o lançamento continua no acerto.</>}
+                                              >
+                                                Desistir
+                                              </ConfirmButton>
+                                            </form>
+                                          </div>
+                                        ) : (
+                                          <DisputeResolve id={d.id} hint={acceptHint(l.kind, d.proposal, l.paidById)} />
+                                        )}
+                                      </div>
+                                    )}
+                                    {d?.status === "recusada" && (
+                                      <p className="text-zinc-500 dark:text-zinc-400">
+                                        ✕ Contestação recusada por {d.resolvedById === me.id ? "você" : names[d.resolvedById!]}
+                                        {d.response && <>: “{d.response}”</>}
+                                      </p>
+                                    )}
+                                    {d?.status === "aceita" && (
+                                      <p className="text-emerald-700 dark:text-emerald-400">
+                                        ✓ Contestação aceita ({splitText(d.proposal, l.paidById)}
+                                        {l.kind === "bill" ? ` em ${mp.name.toLowerCase()}` : ""}): “{d.reason}”{d.response && <> · {d.response}</>}
+                                      </p>
+                                    )}
+                                    {canOpen && (
+                                      <DisputeOpen
+                                        kind={l.kind} sourceId={l.sourceId} month={month} payerName={payer} options={options}
+                                        hint={l.kind === "purchase" ? "Se aceitar, vale para todas as parcelas." : `Se aceitar, vale só para ${mp.name.toLowerCase()}.`}
+                                      />
+                                    )}
+                                  </div>
+                                );
+                              })()}
                             </li>
                           );
                         })}
                       </ul>
                     </div>
                   ))}
+                  {acceptedPurchases.length > 0 && (
+                    <div className="mt-3 rounded-xl bg-emerald-50/70 p-2.5 text-[11px] text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                      <p className="font-semibold">✓ Contestações aceitas neste mês</p>
+                      <ul className="mt-1 space-y-0.5">
+                        {acceptedPurchases.map((d) => (
+                          <li key={d.id}>
+                            <Link href={`/compras/${d.purchaseId}`} className="hover:underline">{d.purchase?.description}</Link>
+                            {" "}agora é {splitText("100", d.purchase!.paidById)} · “{d.reason}”
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
                   <dl className="tabular mt-2 space-y-1 border-t border-zinc-100 pt-3 text-xs dark:border-zinc-800">
                     <div className="flex justify-between gap-3">
                       <dt className="muted">Soma do mês</dt>

@@ -27,7 +27,7 @@ export async function resetCoupleData(_: FormState, form: FormData): Promise<For
   await prisma.$transaction([
     ...(parts.has("receber") ? [prisma.receivable.deleteMany({ where: { coupleId } })] : []), // pagamentos saem em cascata
     ...(parts.has("metas") ? [prisma.goal.deleteMany({ where: { coupleId } })] : []), // aportes saem em cascata
-    ...(parts.has("acertos") ? [prisma.settlement.deleteMany({ where: { coupleId } })] : []),
+    ...(parts.has("acertos") ? [prisma.settlement.deleteMany({ where: { coupleId } }), prisma.dispute.deleteMany({ where: { coupleId } })] : []),
     ...(parts.has("compras") ? [prisma.purchase.deleteMany({ where: { coupleId } })] : []),
     ...(parts.has("contas") ? [prisma.bill.deleteMany({ where: { coupleId } })] : []), // marcas de "pago" em cascata
     ...(parts.has("cartoes") ? [prisma.card.deleteMany({ where: { coupleId } })] : []), // compras ficam sem cartão

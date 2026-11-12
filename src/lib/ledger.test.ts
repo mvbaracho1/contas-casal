@@ -6,6 +6,7 @@ import {
   parseBRL,
   splitInstallments,
   summarizeMonth,
+  billMonthKey,
   type BillLike,
   type PurchaseLike,
   type SettlementLike,
@@ -177,5 +178,39 @@ describe("compra recorrente (assinatura)", () => {
     const cancelada = { ...netflix, endMonth: "2027-01" };
     expect(linesForMonth([cancelada], "2027-01")).toHaveLength(1);
     expect(linesForMonth([cancelada], "2027-02")).toEqual([]);
+  });
+});
+
+describe("contestação aceita de conta fixa", () => {
+  const aluguel = {
+    id: "aluguel", name: "Aluguel", amountCents: 200000, dueDay: 10, paidById: MARIDO,
+    payerSharePct: 50, startMonth: "2026-01", endMonth: null,
+  };
+  const fixed = { bills: [aluguel], incomes: [] };
+  const key = billMonthKey("aluguel", "2026-11");
+
+  it("só de quem pagou: sai do acerto só no mês contestado", () => {
+    const com = { ...fixed, billSplits: [[key, 100]] as const };
+    const nov = summarizeMonth([], [], "2026-11", members, com);
+    expect(nov.monthDebt.amountCents).toBe(0);
+    expect(nov.lines[0]).toMatchObject({ waived: true, splitOverride: 100, otherShareCents: 0, payerShareCents: 200000 });
+    expect(summarizeMonth([], [], "2026-12", members, com).monthDebt).toEqual({ debtorId: ESPOSA, creditorId: MARIDO, amountCents: 100000 });
+  });
+
+  it("nova divisão pela renda vale no mês", () => {
+    const incomes = [
+      { userId: MARIDO, amountCents: 300000, startMonth: "2026-01", endMonth: null },
+      { userId: ESPOSA, amountCents: 100000, startMonth: "2026-01", endMonth: null },
+    ];
+    const s = summarizeMonth([], [], "2026-11", members, { bills: [{ ...aluguel, payerSharePct: 0 }], incomes, billSplits: [[key, null]] });
+    // esposa ganha 25%: deve 25% do aluguel
+    expect(s.monthDebt).toEqual({ debtorId: ESPOSA, creditorId: MARIDO, amountCents: 50000 });
+    expect(s.lines[0]).toMatchObject({ splitOverride: null, waived: false });
+  });
+
+  it("o acumulado também usa a divisão combinada", () => {
+    const sem = summarizeMonth([], [], "2026-12", members, fixed).cumulative.amountCents;
+    const com = summarizeMonth([], [], "2026-12", members, { ...fixed, billSplits: [[key, 100]] }).cumulative.amountCents;
+    expect(sem - com).toBe(100000);
   });
 });

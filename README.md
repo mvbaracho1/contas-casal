@@ -48,6 +48,7 @@ App para um casal controlar compras, parcelas, cartões, contas fixas e renda, e
 - **Visão geral do mês**
   - Saldo previsto, contas a pagar, faturas dos cartões, moradia e compras do mês.
   - **Acerto:** quem envia quanto para quem. Depois do Pix, registre a transferência e o mês fica zerado. Pendências de meses anteriores aparecem no acerto.
+  - **Contestação:** quem deve a parte de um lançamento do acerto pode contestar, com justificativa e uma nova divisão proposta (só de quem pagou, 50/50 ou pela renda). Quem pagou aceita ou recusa, com resposta. Se aceita, a nova divisão vale para a compra inteira, em todas as parcelas, e para a conta fixa só naquele mês.
 
 ### Exemplo
 

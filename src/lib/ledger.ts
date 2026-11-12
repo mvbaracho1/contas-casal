@@ -57,6 +57,10 @@ export interface InstallmentLine {
   of: number;
   /** compra recorrente (assinatura) */
   recurring?: boolean;
+  /** conta fixa com contestação aceita neste mês e que deixou de gerar dívida */
+  waived?: boolean;
+  /** conta fixa com divisão combinada numa contestação aceita (% de quem paga; null = renda) */
+  splitOverride?: number | null;
   amountCents: number;
   paidById: string;
   payerShareCents: number;
@@ -187,7 +191,15 @@ export function billLine(
 export interface Fixed {
   bills: BillLike[];
   incomes: IncomeLike[];
+  /**
+   * Divisão combinada numa contestação aceita, só naquele mês: chave `${billId}:${YYYY-MM}`
+   * (veja `billMonthKey`) -> % de quem paga (null = pela renda). Ex.: 100 = sai do acerto.
+   */
+  billSplits?: Iterable<readonly [string, number | null]>;
 }
+
+/** Chave de uma conta fixa num mês (contestação aceita). */
+export const billMonthKey = (billId: string, month: Ym) => `${billId}:${month}`;
 
 /** Todas as linhas do mês: parcelas de compras + contas fixas. */
 export function allLinesForMonth(
@@ -199,9 +211,15 @@ export function allLinesForMonth(
   if (!fixed) return linesForMonth(purchases, month);
   const income = incomeByUser(fixed.incomes, month, memberIds);
   const lines = linesForMonth(purchases, month, { income, memberIds });
+  const splits = new Map(fixed.billSplits ?? []);
   for (const b of fixed.bills) {
-    const l = billLine(b, month, income, memberIds);
-    if (l) lines.push(l);
+    const key = billMonthKey(b.id, month);
+    // contestação aceita: vale a divisão combinada neste mês
+    const l = splits.has(key)
+      ? billLine({ ...b, payerSharePct: splits.get(key)! }, month, income, memberIds)
+      : billLine(b, month, income, memberIds);
+    if (!l) continue;
+    lines.push(splits.has(key) ? { ...l, splitOverride: splits.get(key)!, waived: l.otherShareCents === 0 } : l);
   }
   return lines;
 }
